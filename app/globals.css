@@ -1,0 +1,78 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+@theme {
+  --color-surface-0: #f5f6f8;
+  --color-surface-1: #ffffff;
+  --color-surface-2: #f0f1f3;
+  --color-surface-3: #e8eaed;
+  --color-surface-hover: #f7f8f9;
+  --color-border: #e0e2e6;
+  --color-border-subtle: #eceef1;
+  --color-text-primary: #1a1d21;
+  --color-text-secondary: #4a5057;
+  --color-text-tertiary: #8b9098;
+  --color-accent: #006fff;
+  --color-accent-hover: #0060e0;
+  --color-accent-subtle: rgba(0, 111, 255, 0.06);
+  --color-accent-muted: rgba(0, 111, 255, 0.12);
+  --color-success: #0f9960;
+  --color-success-subtle: rgba(15, 153, 96, 0.08);
+  --color-warning: #d97706;
+  --color-warning-subtle: rgba(217, 119, 6, 0.08);
+  --color-danger: #dc2626;
+  --color-danger-subtle: rgba(220, 38, 38, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--color-surface-0);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-tertiary);
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--color-surface-2) 25%, var(--color-surface-0) 50%, var(--color-surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-row {
+  animation: fadeInUp 0.3s ease-out both;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.animate-spin {
+  animation: spin 0.8s linear infinite;
+}
