@@ -42,21 +42,18 @@ function StatusDot({ ok }: { ok: boolean }) {
   )
 }
 
-function Toast({ visible }: { visible: boolean }) {
-  return (
-    <span
-      className={`text-[11px] text-success font-medium transition-opacity duration-300 ${visible ? 'opacity-100' : 'opacity-0'}`}
-    >
-      Opgeslagen
-    </span>
-  )
-}
-
 function formatTokens(n: number) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
   return String(n)
 }
+
+const SECRET_KEYS = [
+  'google_ads_developer_token',
+  'google_ads_client_secret',
+  'google_ads_refresh_token',
+  'anthropic_api_key',
+]
 
 // -------------------------------------------------------------------
 // Section wrapper
@@ -101,6 +98,8 @@ const inputClass =
   'w-full bg-surface-0 text-text-primary text-[13px] px-3 py-2.5 rounded-xl outline-none border border-border hover:border-text-tertiary focus:border-accent placeholder:text-text-tertiary transition-colors duration-150'
 const labelClass =
   'text-text-tertiary text-[11px] font-semibold uppercase tracking-wider'
+const btnClass =
+  'w-full mt-4 bg-accent text-white text-[13px] font-semibold py-2.5 rounded-xl hover:bg-accent/90 transition-colors duration-150 disabled:opacity-50'
 
 function FieldRow({
   label,
@@ -118,16 +117,88 @@ function FieldRow({
 }
 
 // -------------------------------------------------------------------
+// SaveButton
+// -------------------------------------------------------------------
+
+function SaveButton({
+  onClick,
+  saving,
+  saved,
+}: {
+  onClick: () => void
+  saving: boolean
+  saved: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={saving}
+      className={btnClass}
+    >
+      {saving ? 'Opslaan...' : saved ? 'Opgeslagen!' : 'Opslaan'}
+    </button>
+  )
+}
+
+// -------------------------------------------------------------------
+// useSectionForm hook
+// -------------------------------------------------------------------
+
+function useSectionForm(
+  keys: string[],
+  settings: Record<string, string | boolean>,
+  saveFn: (key: string, value: string) => Promise<void>,
+) {
+  const [local, setLocal] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  // Initialize local state from settings
+  useEffect(() => {
+    const init: Record<string, string> = {}
+    for (const key of keys) {
+      if (SECRET_KEYS.includes(key)) {
+        init[key] = ''
+      } else {
+        init[key] = String(settings[key] || '')
+      }
+    }
+    setLocal(init)
+  }, [settings, keys.join(',')])
+
+  const update = useCallback((key: string, value: string) => {
+    setLocal((prev) => ({ ...prev, [key]: value }))
+    setSaved(false)
+  }, [])
+
+  const saveAll = useCallback(async () => {
+    setSaving(true)
+    for (const key of keys) {
+      const val = local[key]
+      // Skip empty secret fields (user didn't change them)
+      if (SECRET_KEYS.includes(key) && !val) continue
+      // Skip non-secret fields that haven't changed
+      if (!SECRET_KEYS.includes(key) && val === String(settings[key] || '')) continue
+      await saveFn(key, val)
+    }
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }, [keys, local, settings, saveFn])
+
+  return { local, update, saveAll, saving, saved }
+}
+
+// -------------------------------------------------------------------
 // Main component
 // -------------------------------------------------------------------
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Record<string, string | boolean>>({})
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null)
-  const [savedKey, setSavedKey] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Fetch settings + token usage
   useEffect(() => {
     Promise.all([
       apiFetch('/api/settings').then((r) => r.json()),
@@ -139,7 +210,6 @@ export default function SettingsPage() {
     })
   }, [])
 
-  // Save helper
   const save = useCallback(
     async (key: string, value: string) => {
       const res = await apiFetch('/api/settings', {
@@ -150,149 +220,36 @@ export default function SettingsPage() {
       if (res.ok) {
         setSettings((prev) => {
           const next = { ...prev }
-          // For secret keys, update the has_ flag
           if (key === 'password') return next
-          if (
-            [
-              'google_ads_developer_token',
-              'google_ads_client_secret',
-              'google_ads_refresh_token',
-              'anthropic_api_key',
-            ].includes(key)
-          ) {
+          if (SECRET_KEYS.includes(key)) {
             next[`has_${key}`] = !!value
           } else {
             next[key] = value
           }
           return next
         })
-        setSavedKey(key)
-        setTimeout(() => setSavedKey(null), 1500)
       }
     },
     []
   )
 
-  // Text input that saves on blur
-  function TextInput({
-    settingKey,
-    placeholder,
-    type = 'text',
-  }: {
-    settingKey: string
-    placeholder?: string
-    type?: string
-  }) {
-    const isSecret = [
-      'google_ads_developer_token',
-      'google_ads_client_secret',
-      'google_ads_refresh_token',
-      'anthropic_api_key',
-    ].includes(settingKey)
-    const hasKey = `has_${settingKey}`
-    const currentValue = isSecret ? '' : String(settings[settingKey] || '')
-    const [local, setLocal] = useState(currentValue)
-    const [focused, setFocused] = useState(false)
+  // Section forms
+  const googleAdsKeys = [
+    'google_ads_developer_token', 'google_ads_client_id', 'google_ads_client_secret',
+    'google_ads_refresh_token', 'google_ads_customer_id', 'google_ads_mcc_id',
+  ]
+  const merchantKeys = ['com', 'nl', 'de', 'fr', 'es', 'it'].map((d) => `merchant_center_id_${d}`)
+  const ga4Keys = ['com', 'nl', 'de', 'fr', 'es', 'it'].map((d) => `ga4_property_id_${d}`)
+  const aiKeys = ['anthropic_api_key', 'ai_model', 'ai_analysis_frequency', 'ai_autonomy_level']
+  const syncKeys = ['sync_frequency']
+  const safetyKeys = ['safety_max_budget_change_day', 'safety_max_percent_change']
 
-    // Sync from parent when settings load (but not for secrets)
-    useEffect(() => {
-      if (!isSecret) setLocal(String(settings[settingKey] || ''))
-    }, [settings[settingKey], isSecret, settingKey])
-
-    return (
-      <div className="flex items-center gap-2">
-        <input
-          type={type}
-          value={focused ? local : (isSecret ? '' : local)}
-          placeholder={
-            isSecret && settings[hasKey]
-              ? '••••••••'
-              : placeholder
-          }
-          onChange={(e) => setLocal(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => {
-            setFocused(false)
-            if (local && (isSecret || local !== currentValue)) {
-              save(settingKey, local)
-              if (isSecret) setLocal('')
-            }
-          }}
-          className={inputClass}
-        />
-        <Toast visible={savedKey === settingKey} />
-      </div>
-    )
-  }
-
-  // Select that saves on change
-  function SelectInput({
-    settingKey,
-    options,
-  }: {
-    settingKey: string
-    options: { value: string; label: string }[]
-  }) {
-    const current = String(settings[settingKey] || options[0]?.value || '')
-
-    return (
-      <div className="flex items-center gap-2">
-        <select
-          value={current}
-          onChange={(e) => save(settingKey, e.target.value)}
-          className={inputClass}
-        >
-          {options.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <Toast visible={savedKey === settingKey} />
-      </div>
-    )
-  }
-
-  // Number input that saves on blur
-  function NumberInput({
-    settingKey,
-    placeholder,
-    suffix,
-  }: {
-    settingKey: string
-    placeholder?: string
-    suffix?: string
-  }) {
-    const currentValue = String(settings[settingKey] || '')
-    const [local, setLocal] = useState(currentValue)
-
-    useEffect(() => {
-      setLocal(String(settings[settingKey] || ''))
-    }, [settings[settingKey], settingKey])
-
-    return (
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <input
-            type="number"
-            value={local}
-            placeholder={placeholder}
-            onChange={(e) => setLocal(e.target.value)}
-            onBlur={() => {
-              if (local !== currentValue) save(settingKey, local)
-            }}
-            className={inputClass + (suffix ? ' pr-8' : '')}
-          />
-          {suffix && (
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary text-[12px]">
-              {suffix}
-            </span>
-          )}
-        </div>
-        <Toast visible={savedKey === settingKey} />
-      </div>
-    )
-  }
+  const googleAds = useSectionForm(googleAdsKeys, settings, save)
+  const merchant = useSectionForm(merchantKeys, settings, save)
+  const ga4 = useSectionForm(ga4Keys, settings, save)
+  const ai = useSectionForm(aiKeys, settings, save)
+  const sync = useSectionForm(syncKeys, settings, save)
+  const safety = useSectionForm(safetyKeys, settings, save)
 
   if (loading) {
     return (
@@ -339,41 +296,60 @@ export default function SettingsPage() {
           <Section title="Google Ads" ok={hasGoogleAds}>
             <div className="space-y-3">
               <FieldRow label="Developer Token">
-                <TextInput
-                  settingKey="google_ads_developer_token"
+                <input
                   type="password"
+                  value={googleAds.local.google_ads_developer_token || ''}
+                  placeholder={settings.has_google_ads_developer_token ? '••••••••' : ''}
+                  onChange={(e) => googleAds.update('google_ads_developer_token', e.target.value)}
+                  className={inputClass}
                 />
               </FieldRow>
               <FieldRow label="Client ID">
-                <TextInput
-                  settingKey="google_ads_client_id"
+                <input
+                  type="text"
+                  value={googleAds.local.google_ads_client_id || ''}
                   placeholder="xxxxxx.apps.googleusercontent.com"
+                  onChange={(e) => googleAds.update('google_ads_client_id', e.target.value)}
+                  className={inputClass}
                 />
               </FieldRow>
               <FieldRow label="Client Secret">
-                <TextInput
-                  settingKey="google_ads_client_secret"
+                <input
                   type="password"
+                  value={googleAds.local.google_ads_client_secret || ''}
+                  placeholder={settings.has_google_ads_client_secret ? '••••••••' : ''}
+                  onChange={(e) => googleAds.update('google_ads_client_secret', e.target.value)}
+                  className={inputClass}
                 />
               </FieldRow>
               <FieldRow label="Refresh Token">
-                <TextInput
-                  settingKey="google_ads_refresh_token"
+                <input
                   type="password"
+                  value={googleAds.local.google_ads_refresh_token || ''}
+                  placeholder={settings.has_google_ads_refresh_token ? '••••••••' : ''}
+                  onChange={(e) => googleAds.update('google_ads_refresh_token', e.target.value)}
+                  className={inputClass}
                 />
               </FieldRow>
               <FieldRow label="Customer ID">
-                <TextInput
-                  settingKey="google_ads_customer_id"
+                <input
+                  type="text"
+                  value={googleAds.local.google_ads_customer_id || ''}
                   placeholder="123-456-7890"
+                  onChange={(e) => googleAds.update('google_ads_customer_id', e.target.value)}
+                  className={inputClass}
                 />
               </FieldRow>
               <FieldRow label="MCC ID (optioneel)">
-                <TextInput
-                  settingKey="google_ads_mcc_id"
+                <input
+                  type="text"
+                  value={googleAds.local.google_ads_mcc_id || ''}
                   placeholder="123-456-7890"
+                  onChange={(e) => googleAds.update('google_ads_mcc_id', e.target.value)}
+                  className={inputClass}
                 />
               </FieldRow>
+              <SaveButton onClick={googleAds.saveAll} saving={googleAds.saving} saved={googleAds.saved} />
             </div>
           </Section>
 
@@ -382,12 +358,16 @@ export default function SettingsPage() {
             <div className="space-y-3">
               {(['com', 'nl', 'de', 'fr', 'es', 'it'] as const).map((domain) => (
                 <FieldRow key={domain} label={`Merchant ID — .${domain}`}>
-                  <TextInput
-                    settingKey={`merchant_center_id_${domain}`}
+                  <input
+                    type="text"
+                    value={merchant.local[`merchant_center_id_${domain}`] || ''}
                     placeholder="123456789"
+                    onChange={(e) => merchant.update(`merchant_center_id_${domain}`, e.target.value)}
+                    className={inputClass}
                   />
                 </FieldRow>
               ))}
+              <SaveButton onClick={merchant.saveAll} saving={merchant.saving} saved={merchant.saved} />
             </div>
           </Section>
 
@@ -396,12 +376,16 @@ export default function SettingsPage() {
             <div className="space-y-3">
               {(['com', 'nl', 'de', 'fr', 'es', 'it'] as const).map((domain) => (
                 <FieldRow key={domain} label={`GA4 Property ID — .${domain}`}>
-                  <TextInput
-                    settingKey={`ga4_property_id_${domain}`}
+                  <input
+                    type="text"
+                    value={ga4.local[`ga4_property_id_${domain}`] || ''}
                     placeholder="123456789"
+                    onChange={(e) => ga4.update(`ga4_property_id_${domain}`, e.target.value)}
+                    className={inputClass}
                   />
                 </FieldRow>
               ))}
+              <SaveButton onClick={ga4.saveAll} saving={ga4.saving} saved={ga4.saved} />
             </div>
           </Section>
 
@@ -409,72 +393,101 @@ export default function SettingsPage() {
           <Section title="AI Configuratie" ok={hasAI}>
             <div className="space-y-3">
               <FieldRow label="Anthropic API Key">
-                <TextInput settingKey="anthropic_api_key" type="password" />
+                <input
+                  type="password"
+                  value={ai.local.anthropic_api_key || ''}
+                  placeholder={settings.has_anthropic_api_key ? '••••••••' : ''}
+                  onChange={(e) => ai.update('anthropic_api_key', e.target.value)}
+                  className={inputClass}
+                />
               </FieldRow>
               <FieldRow label="Model">
-                <SelectInput
-                  settingKey="ai_model"
-                  options={[
-                    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-                    { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
-                    { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
-                  ]}
-                />
+                <select
+                  value={ai.local.ai_model || 'claude-sonnet-4-6'}
+                  onChange={(e) => ai.update('ai_model', e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
+                  <option value="claude-opus-4-6">Claude Opus 4.6</option>
+                  <option value="claude-haiku-4-5">Claude Haiku 4.5</option>
+                </select>
               </FieldRow>
               <FieldRow label="Analyse Frequentie">
-                <SelectInput
-                  settingKey="ai_analysis_frequency"
-                  options={[
-                    { value: 'manual', label: 'Handmatig' },
-                    { value: 'daily', label: '1x per dag' },
-                    { value: 'after_sync', label: 'Na elke sync' },
-                  ]}
-                />
+                <select
+                  value={ai.local.ai_analysis_frequency || 'manual'}
+                  onChange={(e) => ai.update('ai_analysis_frequency', e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="manual">Handmatig</option>
+                  <option value="daily">1x per dag</option>
+                  <option value="after_sync">Na elke sync</option>
+                </select>
               </FieldRow>
               <FieldRow label="Autonomie Niveau">
-                <SelectInput
-                  settingKey="ai_autonomy_level"
-                  options={[
-                    { value: 'manual', label: 'Handmatig' },
-                    { value: 'semi', label: 'Semi-autonoom' },
-                    { value: 'full', label: 'Volledig autonoom' },
-                  ]}
-                />
+                <select
+                  value={ai.local.ai_autonomy_level || 'manual'}
+                  onChange={(e) => ai.update('ai_autonomy_level', e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="manual">Handmatig</option>
+                  <option value="semi">Semi-autonoom</option>
+                  <option value="full">Volledig autonoom</option>
+                </select>
               </FieldRow>
+              <SaveButton onClick={ai.saveAll} saving={ai.saving} saved={ai.saved} />
             </div>
           </Section>
 
           {/* Sync */}
           <Section title="Sync">
-            <FieldRow label="Sync Frequentie">
-              <SelectInput
-                settingKey="sync_frequency"
-                options={[
-                  { value: 'daily', label: '1x per dag' },
-                  { value: '4x_daily', label: '4x per dag' },
-                  { value: 'manual', label: 'Alleen handmatig' },
-                ]}
-              />
-            </FieldRow>
+            <div className="space-y-3">
+              <FieldRow label="Sync Frequentie">
+                <select
+                  value={sync.local.sync_frequency || 'daily'}
+                  onChange={(e) => sync.update('sync_frequency', e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="daily">1x per dag</option>
+                  <option value="4x_daily">4x per dag</option>
+                  <option value="manual">Alleen handmatig</option>
+                </select>
+              </FieldRow>
+              <SaveButton onClick={sync.saveAll} saving={sync.saving} saved={sync.saved} />
+            </div>
           </Section>
 
           {/* Safety Limits */}
           <Section title="Veiligheidslimieten">
             <div className="space-y-3">
               <FieldRow label="Max budgetwijziging per dag">
-                <NumberInput
-                  settingKey="safety_max_budget_change_day"
-                  placeholder="50"
-                  suffix="\u20AC"
-                />
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={safety.local.safety_max_budget_change_day || ''}
+                    placeholder="50"
+                    onChange={(e) => safety.update('safety_max_budget_change_day', e.target.value)}
+                    className={inputClass + ' pr-8'}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary text-[12px]">
+                    {'\u20AC'}
+                  </span>
+                </div>
               </FieldRow>
               <FieldRow label="Max % wijziging per actie">
-                <NumberInput
-                  settingKey="safety_max_percent_change"
-                  placeholder="20"
-                  suffix="%"
-                />
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={safety.local.safety_max_percent_change || ''}
+                    placeholder="20"
+                    onChange={(e) => safety.update('safety_max_percent_change', e.target.value)}
+                    className={inputClass + ' pr-8'}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary text-[12px]">
+                    %
+                  </span>
+                </div>
               </FieldRow>
+              <SaveButton onClick={safety.saveAll} saving={safety.saving} saved={safety.saved} />
             </div>
           </Section>
 
