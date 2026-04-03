@@ -129,7 +129,7 @@ export async function syncAdGroups() {
       ad_group.id,
       ad_group.name,
       ad_group.status,
-      campaign.id AS campaign_id
+      campaign.id
     FROM ad_group
     WHERE ad_group.status != 'REMOVED'
   `)
@@ -162,7 +162,7 @@ export async function syncKeywords() {
       ad_group_criterion.keyword.match_type,
       ad_group_criterion.cpc_bid_micros,
       ad_group_criterion.status,
-      ad_group.id AS adgroup_id
+      ad_group.id
     FROM ad_group_criterion
     WHERE ad_group_criterion.type = 'KEYWORD'
     AND ad_group_criterion.status != 'REMOVED'
@@ -279,7 +279,7 @@ export async function syncAds() {
       ad_group_ad.ad.responsive_search_ad.headlines,
       ad_group_ad.ad.responsive_search_ad.descriptions,
       ad_group_ad.status,
-      ad_group.id AS adgroup_id
+      ad_group.id
     FROM ad_group_ad
     WHERE ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD'
     AND ad_group_ad.status != 'REMOVED'
