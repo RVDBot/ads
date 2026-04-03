@@ -12,10 +12,9 @@ function getAuthClient() {
   return oauth2
 }
 
-export async function syncProducts() {
-  const merchantId = getSetting('merchant_center_id')
-  if (!merchantId) throw new Error('Merchant Center ID niet geconfigureerd')
+const DOMAINS = ['com', 'nl', 'de', 'fr', 'es', 'it'] as const
 
+async function syncMerchantForDomain(domain: string, merchantId: string) {
   const auth = getAuthClient()
   const content = google.content({ version: 'v2.1', auth })
   const db = getDb()
@@ -40,7 +39,7 @@ export async function syncProducts() {
       for (const p of items) {
         const price = p.price ? parseFloat(p.price.value || '0') : null
         const margin = p.customLabel0 || null
-        const country = p.targetCountry || null
+        const country = p.targetCountry || domain
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const status = (p as any).destinations?.[0]?.status || 'approved'
         stmt.run(p.id, p.title, price, p.price?.currency || 'EUR', p.availability, margin, country, status)
@@ -51,5 +50,31 @@ export async function syncProducts() {
     pageToken = res.data.nextPageToken || undefined
   } while (pageToken)
 
-  log('info', 'merchant', `${total} producten gesynchroniseerd`)
+  return total
+}
+
+export async function syncProducts() {
+  let totalAll = 0
+
+  for (const domain of DOMAINS) {
+    const merchantId = getSetting(`merchant_center_id_${domain}`)
+    if (!merchantId) continue
+
+    const count = await syncMerchantForDomain(domain, merchantId)
+    totalAll += count
+    log('info', 'merchant', `${count} producten gesynchroniseerd voor .${domain}`)
+  }
+
+  if (totalAll === 0) {
+    // Fallback: check old single setting for backwards compatibility
+    const legacyId = getSetting('merchant_center_id')
+    if (legacyId) {
+      totalAll = await syncMerchantForDomain('com', legacyId)
+      log('info', 'merchant', `${totalAll} producten gesynchroniseerd (legacy single ID)`)
+      return
+    }
+    throw new Error('Geen Merchant Center IDs geconfigureerd')
+  }
+
+  log('info', 'merchant', `Totaal ${totalAll} producten gesynchroniseerd over alle domeinen`)
 }

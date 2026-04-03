@@ -3,10 +3,9 @@ import { getDb } from './db'
 import { getSetting } from './settings'
 import { log } from './logger'
 
-export async function syncGA4Pages(startDate: string = '30daysAgo') {
-  const propertyId = getSetting('ga4_property_id')
-  if (!propertyId) throw new Error('GA4 Property ID niet geconfigureerd')
+const DOMAINS = ['com', 'nl', 'de', 'fr', 'es', 'it'] as const
 
+async function syncGA4ForProperty(propertyId: string, domain: string, startDate: string) {
   const auth = new google.auth.OAuth2(
     getSetting('google_ads_client_id'),
     getSetting('google_ads_client_secret')
@@ -56,11 +55,37 @@ export async function syncGA4Pages(startDate: string = '30daysAgo') {
         parseFloat(mets[1]?.value || '0'),
         parseFloat(mets[2]?.value || '0'),
         parseFloat(mets[3]?.value || '0'),
-        dims[2]?.value
+        dims[2]?.value || domain
       )
     }
   })
   tx()
 
-  log('info', 'ga4', `${rows.length} pagina-rijen gesynchroniseerd`)
+  return rows.length
+}
+
+export async function syncGA4Pages(startDate: string = '30daysAgo') {
+  let totalAll = 0
+
+  for (const domain of DOMAINS) {
+    const propertyId = getSetting(`ga4_property_id_${domain}`)
+    if (!propertyId) continue
+
+    const count = await syncGA4ForProperty(propertyId, domain, startDate)
+    totalAll += count
+    log('info', 'ga4', `${count} pagina-rijen gesynchroniseerd voor .${domain}`)
+  }
+
+  if (totalAll === 0) {
+    // Fallback: check old single setting
+    const legacyId = getSetting('ga4_property_id')
+    if (legacyId) {
+      totalAll = await syncGA4ForProperty(legacyId, 'com', startDate)
+      log('info', 'ga4', `${totalAll} pagina-rijen gesynchroniseerd (legacy single ID)`)
+      return
+    }
+    throw new Error('Geen GA4 Property IDs geconfigureerd')
+  }
+
+  log('info', 'ga4', `Totaal ${totalAll} pagina-rijen gesynchroniseerd over alle domeinen`)
 }

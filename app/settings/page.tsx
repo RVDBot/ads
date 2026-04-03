@@ -309,8 +309,8 @@ export default function SettingsPage() {
     !!settings.has_google_ads_refresh_token &&
     !!settings.google_ads_customer_id
 
-  const hasMerchant = !!settings.merchant_center_id
-  const hasGA4 = !!settings.ga4_property_id
+  const hasMerchant = ['com', 'nl', 'de', 'fr', 'es', 'it'].some((d) => !!settings[`merchant_center_id_${d}`])
+  const hasGA4 = ['com', 'nl', 'de', 'fr', 'es', 'it'].some((d) => !!settings[`ga4_property_id_${d}`])
   const hasAI = !!settings.has_anthropic_api_key
 
   return (
@@ -379,22 +379,30 @@ export default function SettingsPage() {
 
           {/* Merchant Center */}
           <Section title="Merchant Center" ok={hasMerchant}>
-            <FieldRow label="Merchant Center ID">
-              <TextInput
-                settingKey="merchant_center_id"
-                placeholder="123456789"
-              />
-            </FieldRow>
+            <div className="space-y-3">
+              {(['com', 'nl', 'de', 'fr', 'es', 'it'] as const).map((domain) => (
+                <FieldRow key={domain} label={`Merchant ID — .${domain}`}>
+                  <TextInput
+                    settingKey={`merchant_center_id_${domain}`}
+                    placeholder="123456789"
+                  />
+                </FieldRow>
+              ))}
+            </div>
           </Section>
 
           {/* GA4 */}
           <Section title="GA4" ok={hasGA4}>
-            <FieldRow label="GA4 Property ID">
-              <TextInput
-                settingKey="ga4_property_id"
-                placeholder="123456789"
-              />
-            </FieldRow>
+            <div className="space-y-3">
+              {(['com', 'nl', 'de', 'fr', 'es', 'it'] as const).map((domain) => (
+                <FieldRow key={domain} label={`GA4 Property ID — .${domain}`}>
+                  <TextInput
+                    settingKey={`ga4_property_id_${domain}`}
+                    placeholder="123456789"
+                  />
+                </FieldRow>
+              ))}
+            </div>
           </Section>
 
           {/* AI Config */}
