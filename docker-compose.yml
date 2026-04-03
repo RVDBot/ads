@@ -1,0 +1,11 @@
+services:
+  ads-optimizer:
+    image: ghcr.io/rvdbot/ads:latest
+    ports:
+      - "3030:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATABASE_PATH=/app/data/ads-optimizer.db
+      - NODE_ENV=production
+    restart: unless-stopped
