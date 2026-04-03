@@ -1,0 +1,180 @@
+import { getDb } from './db'
+import { getSetting } from './settings'
+import { log } from './logger'
+
+export async function applySuggestion(suggestionId: number, appliedBy: 'manual' | 'semi_auto' | 'full_auto' = 'manual'): Promise<void> {
+  const db = getDb()
+  const suggestion = db.prepare('SELECT * FROM ai_suggestions WHERE id = ?').get(suggestionId) as any
+  if (!suggestion) throw new Error('Suggestie niet gevonden')
+  if (suggestion.status === 'applied') throw new Error('Al toegepast')
+
+  const details = JSON.parse(suggestion.details)
+
+  // Safety checks
+  const maxBudgetChange = parseFloat(getSetting('safety_max_budget_change_day') || '50')
+  const maxPercentChange = parseFloat(getSetting('safety_max_percent_change') || '25')
+
+  let oldValue: string | null = null
+  let newValue: string | null = null
+  let googleResponse: unknown = null
+
+  try {
+    switch (suggestion.type) {
+      case 'budget_change': {
+        const budgetDiff = Math.abs((details.new_budget || 0) - (details.old_budget || 0))
+        if (budgetDiff > maxBudgetChange) throw new Error(`Budget wijziging €${budgetDiff} overschrijdt limiet €${maxBudgetChange}`)
+        oldValue = `€${details.old_budget}`
+        newValue = `€${details.new_budget}`
+        googleResponse = await applyBudgetChange(details)
+        break
+      }
+      case 'bid_adjustment': {
+        const pctChange = Math.abs(details.percent_change || 0)
+        if (pctChange > maxPercentChange) throw new Error(`Wijziging ${pctChange}% overschrijdt limiet ${maxPercentChange}%`)
+        oldValue = `€${details.old_bid}`
+        newValue = `€${details.new_bid}`
+        googleResponse = await applyBidAdjustment(details)
+        break
+      }
+      case 'keyword_negative': {
+        newValue = details.keyword
+        googleResponse = await addNegativeKeyword(details)
+        break
+      }
+      case 'pause_campaign': {
+        oldValue = 'ENABLED'
+        newValue = 'PAUSED'
+        googleResponse = await pauseCampaign(details)
+        break
+      }
+      case 'keyword_add': {
+        newValue = details.keyword || details.keywords?.join(', ')
+        googleResponse = await addKeywords(details)
+        break
+      }
+      default: {
+        log('warn', 'google-ads', `Onbekend suggestie-type: ${suggestion.type}`, { suggestionId })
+        // Still mark as applied for manual-only types
+      }
+    }
+  } catch (e) {
+    log('error', 'google-ads', `Suggestie ${suggestionId} toepassen mislukt`, { error: e instanceof Error ? e.message : String(e) })
+    throw e
+  }
+
+  // Record in action log
+  db.prepare(`
+    INSERT INTO action_log (suggestion_id, action_type, description, old_value, new_value, applied_by, google_response)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(suggestionId, suggestion.type, suggestion.title, oldValue, newValue, appliedBy, JSON.stringify(googleResponse))
+
+  // Mark suggestion as applied
+  db.prepare('UPDATE ai_suggestions SET status = ?, applied_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run('applied', suggestionId)
+
+  // Record ROAS before (for feedback loop)
+  if (details.campaign_id) {
+    const campaignDbId = db.prepare('SELECT id FROM campaigns WHERE google_campaign_id = ?').get(String(details.campaign_id)) as { id: number } | undefined
+    if (campaignDbId) {
+      const currentRoas = db.prepare(`
+        SELECT CASE WHEN SUM(cost) > 0 THEN SUM(conversion_value) / SUM(cost) ELSE 0 END as roas
+        FROM daily_metrics WHERE campaign_id = ? AND date >= date('now', '-7 days')
+      `).get(campaignDbId.id) as { roas: number } | undefined
+      if (currentRoas) {
+        db.prepare('UPDATE ai_suggestions SET result_roas_before = ? WHERE id = ?').run(currentRoas.roas, suggestionId)
+      }
+    }
+  }
+
+  log('info', 'google-ads', `Suggestie ${suggestionId} toegepast: ${suggestion.title}`, { type: suggestion.type, appliedBy })
+}
+
+// Google Ads API action implementations
+async function applyBudgetChange(details: any) {
+  const { getGoogleAdsClient } = await import('./google-ads')
+  const customer = getGoogleAdsClient()
+  return customer.mutateResources([{
+    entity: 'campaign_budget',
+    operation: 'update',
+    resource: {
+      resource_name: `customers/${details.customer_id}/campaignBudgets/${details.budget_id}`,
+      amount_micros: Math.round((details.new_budget || 0) * 1_000_000),
+    },
+  }])
+}
+
+async function applyBidAdjustment(details: any) {
+  const { getGoogleAdsClient } = await import('./google-ads')
+  const customer = getGoogleAdsClient()
+  return customer.mutateResources([{
+    entity: 'ad_group_criterion',
+    operation: 'update',
+    resource: {
+      resource_name: `customers/${details.customer_id}/adGroupCriteria/${details.adgroup_id}~${details.criterion_id}`,
+      cpc_bid_micros: Math.round((details.new_bid || 0) * 1_000_000),
+    },
+  }])
+}
+
+async function addNegativeKeyword(details: any) {
+  const { getGoogleAdsClient } = await import('./google-ads')
+  const customer = getGoogleAdsClient()
+  return customer.mutateResources([{
+    entity: 'campaign_criterion',
+    operation: 'create',
+    resource: {
+      campaign: `customers/${details.customer_id}/campaigns/${details.campaign_id}`,
+      negative: true,
+      keyword: { text: details.keyword, match_type: details.match_type || 'EXACT' },
+    },
+  }])
+}
+
+async function pauseCampaign(details: any) {
+  const { getGoogleAdsClient } = await import('./google-ads')
+  const customer = getGoogleAdsClient()
+  return customer.mutateResources([{
+    entity: 'campaign',
+    operation: 'update',
+    resource: {
+      resource_name: `customers/${details.customer_id}/campaigns/${details.campaign_id}`,
+      status: 'PAUSED',
+    },
+  }])
+}
+
+async function addKeywords(details: any) {
+  const { getGoogleAdsClient } = await import('./google-ads')
+  const customer = getGoogleAdsClient()
+  const keywords = Array.isArray(details.keywords) ? details.keywords : [details.keyword]
+  return customer.mutateResources(keywords.map((kw: string) => ({
+    entity: 'ad_group_criterion' as const,
+    operation: 'create' as const,
+    resource: {
+      ad_group: `customers/${details.customer_id}/adGroups/${details.adgroup_id}`,
+      keyword: { text: kw, match_type: details.match_type || 'PHRASE' },
+    },
+  })))
+}
+
+// Auto-apply logic for scheduler
+export async function autoApplySuggestions(): Promise<void> {
+  const autonomy = getSetting('ai_autonomy_level')
+  if (!autonomy || autonomy === 'manual') return
+
+  const db = getDb()
+  const pending = db.prepare("SELECT * FROM ai_suggestions WHERE status = 'pending'").all() as any[]
+
+  const semiAutoTypes = ['budget_change', 'bid_adjustment', 'keyword_negative']
+
+  for (const s of pending) {
+    const canAutoApply = autonomy === 'full_auto' || (autonomy === 'semi_auto' && semiAutoTypes.includes(s.type))
+    if (canAutoApply) {
+      try {
+        await applySuggestion(s.id, autonomy === 'full_auto' ? 'full_auto' : 'semi_auto')
+      } catch (e) {
+        log('error', 'google-ads', `Auto-apply mislukt voor suggestie ${s.id}`, { error: e instanceof Error ? e.message : String(e) })
+      }
+    }
+  }
+}

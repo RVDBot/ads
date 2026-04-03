@@ -26,6 +26,14 @@ export function scheduleSyncs() {
         } catch (e) {
           log('error', 'ai', 'Auto-analyse na sync mislukt', { error: e instanceof Error ? e.message : String(e) })
         }
+
+        // After analysis, auto-apply if configured
+        try {
+          const { autoApplySuggestions } = await import('./action-engine')
+          await autoApplySuggestions()
+        } catch (e) {
+          log('error', 'google-ads', 'Auto-apply na analyse mislukt', { error: e instanceof Error ? e.message : String(e) })
+        }
       }
     } catch (e) {
       log('error', 'sync', 'Scheduled sync mislukt', { error: e instanceof Error ? e.message : String(e) })
