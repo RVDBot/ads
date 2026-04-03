@@ -1,0 +1,42 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getDb } from '@/lib/db'
+import { requireAuth } from '@/lib/auth-guard'
+
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const denied = requireAuth(req); if (denied) return denied
+  const { id } = await ctx.params
+  const db = getDb()
+
+  const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(id)
+  if (!campaign) return NextResponse.json({ error: 'Niet gevonden' }, { status: 404 })
+
+  const metrics = db.prepare(
+    'SELECT * FROM daily_metrics WHERE campaign_id = ? ORDER BY date DESC LIMIT 30'
+  ).all(id)
+
+  const adGroups = db.prepare(`
+    SELECT ag.*,
+      (SELECT COUNT(*) FROM keywords k WHERE k.adgroup_id = ag.id) as keyword_count
+    FROM ad_groups ag WHERE ag.campaign_id = ?
+  `).all(id)
+
+  const keywords = db.prepare(`
+    SELECT k.*, ag.name as adgroup_name,
+      SUM(km.cost) as total_cost, SUM(km.clicks) as total_clicks,
+      SUM(km.conversions) as total_conversions, SUM(km.conversion_value) as total_value
+    FROM keywords k
+    JOIN ad_groups ag ON ag.id = k.adgroup_id
+    LEFT JOIN keyword_metrics km ON km.keyword_id = k.id AND km.date >= date('now', '-7 days')
+    WHERE ag.campaign_id = ?
+    GROUP BY k.id ORDER BY total_cost DESC
+  `).all(id)
+
+  const searchTerms = db.prepare(`
+    SELECT search_term, SUM(cost) as cost, SUM(clicks) as clicks,
+      SUM(conversions) as conversions, SUM(conversion_value) as value
+    FROM search_terms WHERE campaign_id = ? AND date >= date('now', '-7 days')
+    GROUP BY search_term ORDER BY cost DESC LIMIT 50
+  `).all(id)
+
+  return NextResponse.json({ campaign, metrics, adGroups, keywords, searchTerms })
+}
