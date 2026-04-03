@@ -8,6 +8,8 @@ RUN npm ci
 
 FROM base AS builder
 WORKDIR /app
+ARG GIT_HASH=unknown
+ENV NEXT_PUBLIC_GIT_HASH=$GIT_HASH
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build

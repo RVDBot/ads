@@ -30,3 +30,4 @@ jobs:
           tags: ghcr.io/rvdbot/ads:latest
           build-args: |
             BUILDKIT_PROGRESS=plain
+            GIT_HASH=${{ github.sha }}
