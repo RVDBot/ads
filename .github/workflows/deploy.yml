@@ -1,13 +1,15 @@
 name: Deploy to Hostinger
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Build & Push Docker Image"]
+    types: [completed]
     branches: [main]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    needs: []
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
