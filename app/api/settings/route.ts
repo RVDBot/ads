@@ -12,6 +12,8 @@ const SECRET_KEYS = [
   'anthropic_api_key',
 ]
 
+const DOMAINS = ['com', 'nl', 'de', 'fr', 'es', 'it']
+
 const ALLOWED_KEYS = [
   'google_ads_developer_token',
   'google_ads_client_id',
@@ -19,8 +21,8 @@ const ALLOWED_KEYS = [
   'google_ads_refresh_token',
   'google_ads_customer_id',
   'google_ads_mcc_id',
-  'merchant_center_id',
-  'ga4_property_id',
+  ...DOMAINS.map((d) => `merchant_center_id_${d}`),
+  ...DOMAINS.map((d) => `ga4_property_id_${d}`),
   'anthropic_api_key',
   'ai_model',
   'ai_analysis_frequency',
