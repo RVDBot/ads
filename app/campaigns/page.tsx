@@ -31,45 +31,70 @@ interface CampaignDetail {
 }
 
 function roasColor(roas: number): string {
-  if (roas >= 3) return '#0f9960'   // success green
-  if (roas >= 1) return '#d97706'   // warning orange
-  return '#dc2626'                   // danger red
+  if (roas >= 3) return '#0f9960'
+  if (roas >= 1) return '#d97706'
+  return '#dc2626'
 }
 
 function RoasSparkline({ data }: { data: number[] }) {
   if (data.length < 2) return null
-  const w = 100
+  const w = 120
   const h = 28
+  const pad = 1
   const max = Math.max(...data, 0.1)
   const step = w / (data.length - 1)
 
-  // Build segments with color based on ROAS
-  const segments: string[] = []
-  for (let i = 0; i < data.length - 1; i++) {
-    const x1 = i * step
-    const y1 = h - (data[i] / max) * (h - 2) - 1
-    const x2 = (i + 1) * step
-    const y2 = h - (data[i + 1] / max) * (h - 2) - 1
-    const avgRoas = (data[i] + data[i + 1]) / 2
-    segments.push(
-      `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${roasColor(avgRoas)}" stroke-width="1.5" stroke-linecap="round"/>`
-    )
+  // Calculate points
+  const points = data.map((v, i) => ({
+    x: i * step,
+    y: h - pad - (v / max) * (h - pad * 2),
+  }))
+
+  // Build smooth cubic bezier path with color gradient stops
+  const defs: string[] = []
+  const gradId = `g${Math.random().toString(36).slice(2, 8)}`
+
+  // Linear gradient with color stops based on ROAS at each point
+  const stops = data.map((v, i) => {
+    const offset = (i / (data.length - 1)) * 100
+    return `<stop offset="${offset}%" stop-color="${roasColor(v)}"/>`
+  })
+  defs.push(`<defs><linearGradient id="${gradId}" x1="0" x2="1" y1="0" y2="0">${stops.join('')}</linearGradient></defs>`)
+
+  // Smooth cubic bezier path (Catmull-Rom to Bezier)
+  let path = `M ${points[0].x} ${points[0].y}`
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(i - 1, 0)]
+    const p1 = points[i]
+    const p2 = points[i + 1]
+    const p3 = points[Math.min(i + 2, points.length - 1)]
+
+    const tension = 0.3
+    const cp1x = p1.x + (p2.x - p0.x) * tension
+    const cp1y = p1.y + (p2.y - p0.y) * tension
+    const cp2x = p2.x - (p3.x - p1.x) * tension
+    const cp2y = p2.y - (p3.y - p1.y) * tension
+
+    path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`
   }
+
+  const svg = `${defs.join('')}<path d="${path}" fill="none" stroke="url(#${gradId})" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`
 
   return (
     <svg
       width={w} height={h}
       viewBox={`0 0 ${w} ${h}`}
       className="block"
-      dangerouslySetInnerHTML={{ __html: segments.join('') }}
+      dangerouslySetInnerHTML={{ __html: svg }}
     />
   )
 }
 
-const statusDotColors: Record<string, string> = {
-  ENABLED: 'bg-success',
-  PAUSED: 'bg-text-tertiary',
-  REMOVED: 'bg-danger',
+function statusDotColor(status: string): string {
+  if (status === 'ENABLED') return '#0f9960'
+  if (status === 'PAUSED') return '#8b9098'
+  if (status === 'REMOVED') return '#dc2626'
+  return '#8b9098'
 }
 
 const typeColors: Record<string, string> = {
@@ -193,7 +218,8 @@ export default function CampaignsPage() {
                     style={{ animationDelay: `${i * 30}ms` }}>
                     <td className="px-4 py-2.5 text-[13px] font-medium text-text-primary max-w-[250px]">
                       <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full shrink-0 ${statusDotColors[c.status] || 'bg-text-tertiary'}`}
+                        <span className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: statusDotColor(c.status) }}
                           title={c.status} />
                         <span className="truncate">{c.name}</span>
                       </div>
