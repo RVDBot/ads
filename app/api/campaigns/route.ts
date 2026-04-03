@@ -77,6 +77,31 @@ export async function GET(req: NextRequest) {
     GROUP BY dm.date ORDER BY dm.date ASC
   `).all(...dailyParams)
 
+  // Sparkline data: daily ROAS per campaign (last 30 days)
+  const sparkStart = new Date()
+  sparkStart.setDate(sparkStart.getDate() - 30)
+  const sparkStartStr = sparkStart.toISOString().split('T')[0]
+
+  const sparklines = db.prepare(`
+    SELECT dm.campaign_id, dm.date,
+      CASE WHEN dm.cost > 0 THEN dm.conversion_value / dm.cost ELSE 0 END as roas
+    FROM daily_metrics dm
+    WHERE dm.date >= ?
+    ORDER BY dm.date ASC
+  `).all(sparkStartStr) as { campaign_id: number; date: string; roas: number }[]
+
+  const sparklineMap: Record<number, number[]> = {}
+  for (const row of sparklines) {
+    if (!sparklineMap[row.campaign_id]) sparklineMap[row.campaign_id] = []
+    sparklineMap[row.campaign_id].push(row.roas)
+  }
+
+  // Attach sparklines to campaigns
+  const campaignsWithSparklines = (campaigns as any[]).map(c => ({
+    ...c,
+    sparkline: sparklineMap[c.id] || [],
+  }))
+
   // Spend per country
   const countryBreakdown = db.prepare(`
     SELECT c.country, SUM(dm.cost) as cost, SUM(dm.conversion_value) as value
@@ -86,5 +111,5 @@ export async function GET(req: NextRequest) {
     GROUP BY c.country ORDER BY cost DESC
   `).all(startStr)
 
-  return NextResponse.json({ campaigns, kpi, prevKpi, dailyRoas, countryBreakdown })
+  return NextResponse.json({ campaigns: campaignsWithSparklines, kpi, prevKpi, dailyRoas, countryBreakdown })
 }

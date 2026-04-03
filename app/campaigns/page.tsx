@@ -19,6 +19,7 @@ interface Campaign {
   total_conversions: number
   total_value: number
   roas: number
+  sparkline: number[]
 }
 
 interface CampaignDetail {
@@ -27,6 +28,48 @@ interface CampaignDetail {
   adGroups: Array<{ id: number; name: string; status: string; keyword_count: number }>
   keywords: Array<{ text: string; match_type: string; bid: number; adgroup_name: string; total_cost: number; total_clicks: number; total_conversions: number; total_value: number }>
   searchTerms: Array<{ search_term: string; cost: number; clicks: number; conversions: number; value: number }>
+}
+
+function roasColor(roas: number): string {
+  if (roas >= 3) return '#0f9960'   // success green
+  if (roas >= 1) return '#d97706'   // warning orange
+  return '#dc2626'                   // danger red
+}
+
+function RoasSparkline({ data }: { data: number[] }) {
+  if (data.length < 2) return null
+  const w = 100
+  const h = 28
+  const max = Math.max(...data, 0.1)
+  const step = w / (data.length - 1)
+
+  // Build segments with color based on ROAS
+  const segments: string[] = []
+  for (let i = 0; i < data.length - 1; i++) {
+    const x1 = i * step
+    const y1 = h - (data[i] / max) * (h - 2) - 1
+    const x2 = (i + 1) * step
+    const y2 = h - (data[i + 1] / max) * (h - 2) - 1
+    const avgRoas = (data[i] + data[i + 1]) / 2
+    segments.push(
+      `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${roasColor(avgRoas)}" stroke-width="1.5" stroke-linecap="round"/>`
+    )
+  }
+
+  return (
+    <svg
+      width={w} height={h}
+      viewBox={`0 0 ${w} ${h}`}
+      className="block"
+      dangerouslySetInnerHTML={{ __html: segments.join('') }}
+    />
+  )
+}
+
+const statusDotColors: Record<string, string> = {
+  ENABLED: 'bg-success',
+  PAUSED: 'bg-text-tertiary',
+  REMOVED: 'bg-danger',
 }
 
 const typeColors: Record<string, string> = {
@@ -133,10 +176,10 @@ export default function CampaignsPage() {
                   <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2.5">Naam</th>
                   <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2.5">Type</th>
                   <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2.5">Land</th>
-                  <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2.5">Status</th>
                   <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">Budget/dag</th>
                   <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">Kosten ({period}d)</th>
                   <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">ROAS</th>
+                  <th className="text-center text-[11px] font-medium text-text-tertiary px-4 py-2.5">ROAS 30d</th>
                   <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">Conversies</th>
                 </tr>
               </thead>
@@ -148,22 +191,26 @@ export default function CampaignsPage() {
                       selectedId === c.id ? 'bg-accent-subtle' : i % 2 === 0 ? 'bg-surface-1' : 'bg-surface-0/50'
                     } hover:bg-surface-hover`}
                     style={{ animationDelay: `${i * 30}ms` }}>
-                    <td className="px-4 py-2.5 text-[13px] font-medium text-text-primary max-w-[250px] truncate">{c.name}</td>
+                    <td className="px-4 py-2.5 text-[13px] font-medium text-text-primary max-w-[250px]">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${statusDotColors[c.status] || 'bg-text-tertiary'}`}
+                          title={c.status} />
+                        <span className="truncate">{c.name}</span>
+                      </div>
+                    </td>
                     <td className="px-4 py-2.5">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${typeColors[c.type] || 'bg-surface-3 text-text-tertiary'}`}>
                         {c.type}
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-[13px]">{c.country ? countryFlag(c.country) : '—'}</td>
-                    <td className="px-4 py-2.5">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColors[c.status] || ''}`}>
-                        {c.status}
-                      </span>
-                    </td>
                     <td className="px-4 py-2.5 text-[13px] text-right text-text-secondary">{c.daily_budget ? formatCurrency(c.daily_budget) : '—'}</td>
                     <td className="px-4 py-2.5 text-[13px] text-right font-medium text-text-primary">{formatCurrency(c.total_cost || 0)}</td>
                     <td className={`px-4 py-2.5 text-[13px] text-right font-semibold ${(c.roas || 0) >= 3 ? 'text-success' : (c.roas || 0) >= 1 ? 'text-warning' : 'text-danger'}`}>
                       {formatRoas(c.roas || 0)}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      <RoasSparkline data={c.sparkline || []} />
                     </td>
                     <td className="px-4 py-2.5 text-[13px] text-right text-text-secondary">{Math.round(c.total_conversions || 0)}</td>
                   </tr>
