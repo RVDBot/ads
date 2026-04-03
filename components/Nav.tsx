@@ -1,7 +1,7 @@
 'use client'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { apiFetch } from '@/lib/api'
 
 const tabs = [
@@ -13,14 +13,44 @@ const tabs = [
   { label: 'Actie Log', href: '/actions' },
 ]
 
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'zojuist'
+  if (mins < 60) return `${mins} min geleden`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours} uur geleden`
+  const days = Math.floor(hours / 24)
+  return `${days} dag${days > 1 ? 'en' : ''} geleden`
+}
+
 export default function Nav() {
   const pathname = usePathname()
   const [syncing, setSyncing] = useState(false)
+  const [lastSync, setLastSync] = useState<string | null>(null)
+
+  useEffect(() => {
+    apiFetch('/api/sync')
+      .then(r => r.json())
+      .then(d => { if (d.lastSyncAt) setLastSync(d.lastSyncAt) })
+      .catch(() => {})
+  }, [])
+
+  // Update "x min geleden" every 30 seconds
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 30000)
+    return () => clearInterval(id)
+  }, [])
 
   async function handleSync() {
     setSyncing(true)
     try {
       await apiFetch('/api/sync', { method: 'POST' })
+      // Refresh sync status
+      const r = await apiFetch('/api/sync')
+      const d = await r.json()
+      if (d.lastSyncAt) setLastSync(d.lastSyncAt)
     } finally {
       setSyncing(false)
     }
@@ -51,7 +81,9 @@ export default function Nav() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <span className="text-[11px] text-text-tertiary">Laatste sync: —</span>
+          <span className="text-[11px] text-text-tertiary">
+            Laatste sync: {lastSync ? timeAgo(lastSync) : '—'}
+          </span>
           <button onClick={handleSync} disabled={syncing}
             className="text-[12px] font-medium px-3.5 py-1.5 rounded-lg bg-accent text-white hover:bg-accent-hover disabled:opacity-50 transition-colors">
             {syncing ? 'Syncing...' : 'Sync nu'}
