@@ -122,11 +122,30 @@ Analyseer deze data en geef je suggesties als JSON.`
 
   let parsed: { findings: string[]; suggestions: Array<{ type: string; priority: string; title: string; description: string; details: Record<string, unknown> }> }
   try {
-    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
-    parsed = JSON.parse(cleaned)
+    // Try direct parse first
+    parsed = JSON.parse(raw)
   } catch {
-    log('error', 'ai', 'AI response parsing mislukt', { raw: raw.slice(0, 500) })
-    throw new Error('AI response kon niet geparsed worden')
+    try {
+      // Strip markdown code fences
+      const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
+      const cleaned = jsonMatch ? jsonMatch[1].trim() : raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+      parsed = JSON.parse(cleaned)
+    } catch {
+      // Last resort: find first { and last }
+      const start = raw.indexOf('{')
+      const end = raw.lastIndexOf('}')
+      if (start !== -1 && end > start) {
+        try {
+          parsed = JSON.parse(raw.slice(start, end + 1))
+        } catch {
+          log('error', 'ai', 'AI response parsing mislukt', { raw: raw.slice(0, 1000) })
+          throw new Error('AI response kon niet geparsed worden')
+        }
+      } else {
+        log('error', 'ai', 'AI response parsing mislukt', { raw: raw.slice(0, 1000) })
+        throw new Error('AI response kon niet geparsed worden')
+      }
+    }
   }
 
   const analysis = db.prepare(`
