@@ -3,7 +3,7 @@ import { getDb } from './db'
 import { getSetting } from './settings'
 import { log } from './logger'
 
-export async function runAnalysis(): Promise<number> {
+export async function runAnalysis(period = 14): Promise<number> {
   const apiKey = getSetting('anthropic_api_key')
   if (!apiKey) throw new Error('Anthropic API key niet geconfigureerd')
 
@@ -11,48 +11,49 @@ export async function runAnalysis(): Promise<number> {
   const client = new Anthropic({ apiKey })
   const db = getDb()
 
-  // Gather context
+  // Gather context — exclude campaigns inactive for 90+ days
   const campaigns = db.prepare(`
     SELECT c.*,
-      SUM(dm.cost) as cost_7d, SUM(dm.conversion_value) as value_7d, SUM(dm.conversions) as conv_7d,
-      CASE WHEN SUM(dm.cost) > 0 THEN SUM(dm.conversion_value) / SUM(dm.cost) ELSE 0 END as roas_7d
+      SUM(dm.cost) as total_cost, SUM(dm.conversion_value) as total_value, SUM(dm.conversions) as total_conv,
+      CASE WHEN SUM(dm.cost) > 0 THEN SUM(dm.conversion_value) / SUM(dm.cost) ELSE 0 END as roas
     FROM campaigns c
-    LEFT JOIN daily_metrics dm ON dm.campaign_id = c.id AND dm.date >= date('now', '-7 days')
+    LEFT JOIN daily_metrics dm ON dm.campaign_id = c.id AND dm.date >= date('now', '-' || ? || ' days')
     WHERE c.status = 'ENABLED'
+      AND EXISTS (SELECT 1 FROM daily_metrics dm2 WHERE dm2.campaign_id = c.id AND dm2.date >= date('now', '-90 days'))
     GROUP BY c.id
-  `).all()
+  `).all(period)
 
   const dailyTrends = db.prepare(`
     SELECT dm.date, c.name, c.country, dm.cost, dm.conversion_value, dm.roas, dm.clicks
     FROM daily_metrics dm JOIN campaigns c ON c.id = dm.campaign_id
-    WHERE dm.date >= date('now', '-14 days')
+    WHERE dm.date >= date('now', '-' || ? || ' days')
     ORDER BY dm.date DESC
-  `).all()
+  `).all(period)
 
   const topKeywords = db.prepare(`
     SELECT k.text, k.match_type, ag.name as adgroup, c.name as campaign, c.country,
       SUM(km.cost) as cost, SUM(km.clicks) as clicks, SUM(km.conversions) as conversions, SUM(km.conversion_value) as value
     FROM keywords k
-    JOIN keyword_metrics km ON km.keyword_id = k.id AND km.date >= date('now', '-7 days')
+    JOIN keyword_metrics km ON km.keyword_id = k.id AND km.date >= date('now', '-' || ? || ' days')
     JOIN ad_groups ag ON ag.id = k.adgroup_id
     JOIN campaigns c ON c.id = ag.campaign_id
     GROUP BY k.id ORDER BY cost DESC LIMIT 50
-  `).all()
+  `).all(period)
 
   const wastedTerms = db.prepare(`
     SELECT search_term, SUM(cost) as cost, SUM(clicks) as clicks, SUM(conversions) as conversions
-    FROM search_terms WHERE date >= date('now', '-7 days')
+    FROM search_terms WHERE date >= date('now', '-' || ? || ' days')
     GROUP BY search_term HAVING SUM(cost) > 2 AND SUM(conversions) = 0
     ORDER BY cost DESC LIMIT 30
-  `).all()
+  `).all(period)
 
   const products = db.prepare('SELECT * FROM products WHERE status = ? ORDER BY margin_label DESC').all('approved')
 
   const ga4Pages = db.prepare(`
     SELECT page_path, country, AVG(bounce_rate) as bounce_rate, AVG(avg_session_duration) as duration, SUM(sessions) as sessions
-    FROM ga4_pages WHERE date >= date('now', '-7 days')
+    FROM ga4_pages WHERE date >= date('now', '-' || ? || ' days')
     GROUP BY page_path, country ORDER BY sessions DESC LIMIT 30
-  `).all()
+  `).all(period)
 
   const shopProfiles = db.prepare('SELECT country, profile_content FROM shop_profile').all() as Array<{ country: string; profile_content: string }>
 
@@ -103,22 +104,22 @@ Gebruik ALTIJD de exacte campagne- en ad group namen uit de data hierboven. Het 
 - **new_campaign**: { "name": "voorgestelde naam", "country": "nl", "type": "SEARCH|SHOPPING", "daily_budget": 10.0, "keywords": ["kw1"] }
 - **schedule_change**: { "campaign_name": "exacte naam", "schedule": "beschrijving van wijziging" }`
 
-  const userMessage = `## Campagnes (laatste 7 dagen)
+  const userMessage = `## Campagnes (laatste ${period} dagen)
 ${JSON.stringify(campaigns, null, 2)}
 
-## Dagelijkse trends (14 dagen)
+## Dagelijkse trends (${period} dagen)
 ${JSON.stringify(dailyTrends, null, 2)}
 
-## Top zoekwoorden (7 dagen)
+## Top zoekwoorden (${period} dagen)
 ${JSON.stringify(topKeywords, null, 2)}
 
-## Verspillende zoektermen (kosten zonder conversie)
+## Verspillende zoektermen (kosten zonder conversie, ${period} dagen)
 ${JSON.stringify(wastedTerms, null, 2)}
 
 ## Producten (Merchant Center)
 ${JSON.stringify(products.slice(0, 30), null, 2)}
 
-## Landingspagina stats (GA4, 7 dagen)
+## Landingspagina stats (GA4, ${period} dagen)
 ${JSON.stringify(ga4Pages, null, 2)}
 
 Analyseer deze data en geef je suggesties als JSON.`

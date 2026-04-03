@@ -11,6 +11,7 @@ interface SuggestionCardProps {
   type: string
   status: string
   details: string
+  campaignName?: string | null
   appliedAt?: string
   roasBefore?: number
   roasAfter?: number
@@ -34,7 +35,7 @@ const typeBadges: Record<string, string> = {
   schedule_change: 'Schema',
 }
 
-export default function SuggestionCard({ id, title, description, priority, type, status, details, appliedAt, roasBefore, roasAfter, onUpdate }: SuggestionCardProps) {
+export default function SuggestionCard({ id, title, description, priority, type, status, details, campaignName, appliedAt, roasBefore, roasAfter, onUpdate }: SuggestionCardProps) {
   const [loading, setLoading] = useState('')
   const badge = priorityBadges[priority] || priorityBadges.medium
   const [expanded, setExpanded] = useState(false)
@@ -79,6 +80,9 @@ export default function SuggestionCard({ id, title, description, priority, type,
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[13px] font-semibold text-text-primary">{title}</div>
+          {campaignName && (
+            <div className="text-[11px] text-accent font-medium mt-0.5">{campaignName}</div>
+          )}
           <div className="text-[12px] text-text-secondary mt-1">{description}</div>
 
           {status === 'applied' && (

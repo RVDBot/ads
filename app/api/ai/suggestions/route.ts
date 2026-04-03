@@ -24,9 +24,19 @@ export async function GET(req: NextRequest) {
     ${where}
     ORDER BY a.created_at DESC, s.priority DESC
     LIMIT ?
-  `).all(...params)
+  `).all(...params) as any[]
 
-  return NextResponse.json({ suggestions })
+  // Extract campaign_name from details JSON for display
+  const enriched = suggestions.map(s => {
+    let campaign_name: string | null = null
+    try {
+      const details = JSON.parse(s.details || '{}')
+      campaign_name = details.campaign_name || details.name || null
+    } catch { /* empty */ }
+    return { ...s, campaign_name }
+  })
+
+  return NextResponse.json({ suggestions: enriched })
 }
 
 export async function PATCH(req: NextRequest) {

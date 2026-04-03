@@ -13,6 +13,7 @@ interface Suggestion {
   type: string
   status: string
   details: string
+  campaign_name?: string | null
   applied_at?: string
   result_roas_before?: number
   result_roas_after?: number
@@ -37,6 +38,7 @@ export default function InsightsPage() {
   const [loading, setLoading] = useState(true)
   const [analyzing, setAnalyzing] = useState(false)
   const [lastAnalysis, setLastAnalysis] = useState<string | null>(null)
+  const [showPeriodMenu, setShowPeriodMenu] = useState(false)
   const [priorityFilter, setPriorityFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -64,10 +66,15 @@ export default function InsightsPage() {
 
   useEffect(() => { fetchSuggestions() }, [fetchSuggestions])
 
-  async function handleAnalyze() {
+  async function handleAnalyze(period = 14) {
+    setShowPeriodMenu(false)
     setAnalyzing(true)
     try {
-      await apiFetch('/api/ai/analyze', { method: 'POST' })
+      await apiFetch('/api/ai/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ period }),
+      })
       await fetchSuggestions()
     } finally {
       setAnalyzing(false)
@@ -95,10 +102,35 @@ export default function InsightsPage() {
               </p>
             )}
           </div>
-          <button onClick={handleAnalyze} disabled={analyzing}
-            className="px-4 py-2 bg-accent text-white text-[12px] font-semibold rounded-lg hover:bg-accent-hover disabled:opacity-50 transition-colors">
-            {analyzing ? 'Analyseren...' : 'Analyseer nu'}
-          </button>
+          <div className="relative">
+            <div className="flex">
+              <button onClick={() => handleAnalyze(14)} disabled={analyzing}
+                className="px-4 py-2 bg-accent text-white text-[12px] font-semibold rounded-l-lg hover:bg-accent-hover disabled:opacity-50 transition-colors">
+                {analyzing ? 'Analyseren...' : 'Analyseer nu'}
+              </button>
+              <button onClick={() => setShowPeriodMenu(!showPeriodMenu)} disabled={analyzing}
+                className="px-2 py-2 bg-accent text-white rounded-r-lg hover:bg-accent-hover disabled:opacity-50 transition-colors border-l border-white/20">
+                <svg className={`w-3 h-3 transition-transform ${showPeriodMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+            {showPeriodMenu && (
+              <div className="absolute right-0 mt-1 bg-surface-1 border border-border-subtle rounded-lg shadow-lg py-1 z-50 min-w-[140px]">
+                {[
+                  { days: 7, label: '7 dagen' },
+                  { days: 14, label: '14 dagen' },
+                  { days: 30, label: '30 dagen' },
+                  { days: 90, label: '90 dagen' },
+                ].map(opt => (
+                  <button key={opt.days} onClick={() => handleAnalyze(opt.days)}
+                    className="w-full text-left px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-2 transition-colors">
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Stats */}
@@ -191,6 +223,7 @@ export default function InsightsPage() {
                   type={s.type}
                   status={s.status}
                   details={s.details || '{}'}
+                  campaignName={s.campaign_name}
                   appliedAt={s.applied_at}
                   roasBefore={s.result_roas_before}
                   roasAfter={s.result_roas_after}
