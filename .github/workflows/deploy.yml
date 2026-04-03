@@ -17,6 +17,8 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          debug: true
           script: |
             cd /root
             docker compose pull
