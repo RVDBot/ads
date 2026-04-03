@@ -514,6 +514,10 @@ export default function SettingsPage() {
             <LogViewer />
           </Section>
         </div>
+
+        <div className="mt-6 text-center text-text-tertiary text-[11px]">
+          Ads Optimizer v{process.env.NEXT_PUBLIC_GIT_HASH || 'dev'}
+        </div>
       </div>
     </div>
   )
