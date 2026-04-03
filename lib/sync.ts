@@ -1,6 +1,21 @@
 import { log } from './logger'
 import { setSetting } from './settings'
 
+function errorToString(e: unknown): string {
+  if (e instanceof Error) return e.message
+  if (typeof e === 'string') return e
+  // google-ads-api throws objects with errors array
+  if (e && typeof e === 'object') {
+    const obj = e as Record<string, unknown>
+    if (Array.isArray(obj.errors)) {
+      return obj.errors.map((err: any) => err.message || JSON.stringify(err)).join('; ')
+    }
+    if (obj.message) return String(obj.message)
+    return JSON.stringify(e)
+  }
+  return String(e)
+}
+
 export async function runFullSync(trigger: 'manual' | 'scheduled' = 'manual'): Promise<{ success: boolean; errors: string[] }> {
   const errors: string[] = []
   log('info', 'sync', `Full sync gestart (${trigger})`)
@@ -20,9 +35,9 @@ export async function runFullSync(trigger: 'manual' | 'scheduled' = 'manual'): P
     await syncAdMetrics('LAST_30_DAYS')
     log('info', 'google-ads', 'Google Ads sync voltooid')
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
+    const msg = errorToString(e)
     errors.push(`Google Ads: ${msg}`)
-    log('error', 'google-ads', 'Google Ads sync mislukt', { error: msg, stack: e instanceof Error ? e.stack : undefined })
+    log('error', 'google-ads', 'Google Ads sync mislukt', { error: msg, stack: e instanceof Error ? e.stack : undefined, raw: e })
   }
 
   // 2. Merchant Center
@@ -31,7 +46,7 @@ export async function runFullSync(trigger: 'manual' | 'scheduled' = 'manual'): P
     await syncProducts()
     log('info', 'merchant', 'Merchant Center sync voltooid')
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
+    const msg = errorToString(e)
     errors.push(`Merchant Center: ${msg}`)
     log('error', 'merchant', 'Merchant Center sync mislukt', { error: msg, stack: e instanceof Error ? e.stack : undefined })
   }
@@ -42,7 +57,7 @@ export async function runFullSync(trigger: 'manual' | 'scheduled' = 'manual'): P
     await syncGA4Pages('30daysAgo')
     log('info', 'ga4', 'GA4 sync voltooid')
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
+    const msg = errorToString(e)
     errors.push(`GA4: ${msg}`)
     log('error', 'ga4', 'GA4 sync mislukt', { error: msg, stack: e instanceof Error ? e.stack : undefined })
   }
