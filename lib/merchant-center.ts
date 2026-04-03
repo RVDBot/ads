@@ -37,6 +37,7 @@ async function syncMerchantForDomain(domain: string, merchantId: string) {
 
     const tx = db.transaction((items: typeof products) => {
       for (const p of items) {
+        if (!p.id || !p.title) continue
         const price = p.price ? parseFloat(p.price.value || '0') : null
         const margin = p.customLabel0 || null
         const country = p.targetCountry || domain
