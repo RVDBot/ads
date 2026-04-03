@@ -49,6 +49,41 @@ export async function runAnalysis(period = 14): Promise<number> {
 
   const products = db.prepare('SELECT * FROM products WHERE status = ? ORDER BY margin_label DESC').all('approved')
 
+  // Current ad texts per campaign/adgroup
+  const currentAds = db.prepare(`
+    SELECT c.name as campaign, ag.name as adgroup, a.headlines, a.descriptions, a.status
+    FROM ads a
+    JOIN ad_groups ag ON ag.id = a.adgroup_id
+    JOIN campaigns c ON c.id = ag.campaign_id
+    WHERE a.status = 'ENABLED' AND c.status = 'ENABLED'
+    ORDER BY c.name, ag.name
+  `).all() as Array<{ campaign: string; adgroup: string; headlines: string; descriptions: string; status: string }>
+
+  // Parse JSON headlines/descriptions for readability
+  const adsForAI = currentAds.map(a => ({
+    campaign: a.campaign,
+    adgroup: a.adgroup,
+    headlines: JSON.parse(a.headlines || '[]'),
+    descriptions: JSON.parse(a.descriptions || '[]'),
+  }))
+
+  // Match products to campaigns by keyword overlap in names
+  const productsByCampaign: Record<string, Array<{ title: string; price: number | null; margin_label: string | null; country: string | null }>> = {}
+  const allProducts = products as Array<{ title: string; price: number | null; margin_label: string | null; country: string | null }>
+  const campaignList = campaigns as Array<{ name: string; country: string | null }>
+  for (const camp of campaignList) {
+    const campWords = camp.name.toLowerCase().split(/[\s\-_]+/).filter(w => w.length > 2)
+    const matched = allProducts.filter(p => {
+      const titleLower = p.title.toLowerCase()
+      return campWords.some(w => titleLower.includes(w)) || (camp.country && p.country && p.country.toLowerCase().includes(camp.country.toLowerCase()))
+    })
+    if (matched.length > 0) {
+      productsByCampaign[camp.name] = matched.slice(0, 10).map(p => ({
+        title: p.title, price: p.price, margin_label: p.margin_label, country: p.country,
+      }))
+    }
+  }
+
   const ga4Pages = db.prepare(`
     SELECT page_path, country, AVG(bounce_rate) as bounce_rate, AVG(avg_session_duration) as duration, SUM(sessions) as sessions
     FROM ga4_pages WHERE date >= date('now', '-' || ? || ' days')
@@ -74,6 +109,14 @@ Analyseer de Google Ads data en geef concrete, actionable suggesties om de ROAS 
 - Zoekwoord-verspilling (kosten zonder conversies)
 - Landingspagina-kwaliteit (hoge bounce rate = probleem)
 - Trends (dalende ROAS = actie nodig)
+
+## Advertentietekst regels
+BELANGRIJK: Bij ad_text_change suggesties:
+- Je krijgt de HUIDIGE headlines en descriptions per adgroup. Verbeter deze, niet verzinnen.
+- Gebruik ALTIJD de echte productnamen en eigenschappen uit de Merchant Center data en de product-campagne koppelingen.
+- Headlines max 30 tekens, descriptions max 90 tekens (Google Ads limieten).
+- Schrijf in de taal van het land van de campagne (NL=Nederlands, DE=Duits, FR=Frans, ES=Spaans, IT=Italiaans).
+- Verzin NOOIT productkenmerken. Gebruik alleen wat in de productdata staat.
 
 ## Eerdere suggesties en resultaten (feedback loop)
 ${previousResults.length > 0 ? JSON.stringify(previousResults, null, 2) : 'Nog geen eerdere suggesties toegepast.'}
@@ -116,8 +159,14 @@ ${JSON.stringify(topKeywords, null, 2)}
 ## Verspillende zoektermen (kosten zonder conversie, ${period} dagen)
 ${JSON.stringify(wastedTerms, null, 2)}
 
-## Producten (Merchant Center)
-${JSON.stringify(products.slice(0, 30), null, 2)}
+## Huidige advertentieteksten per campagne/adgroup
+${JSON.stringify(adsForAI, null, 2)}
+
+## Producten gekoppeld aan campagnes
+${Object.keys(productsByCampaign).length > 0 ? JSON.stringify(productsByCampaign, null, 2) : 'Geen product-campagne koppelingen gevonden.'}
+
+## Alle producten (Merchant Center)
+${JSON.stringify(allProducts.slice(0, 30).map(p => ({ title: p.title, price: p.price, margin_label: p.margin_label, country: p.country })), null, 2)}
 
 ## Landingspagina stats (GA4, ${period} dagen)
 ${JSON.stringify(ga4Pages, null, 2)}
