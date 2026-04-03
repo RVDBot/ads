@@ -86,10 +86,22 @@ Antwoord ALLEEN met een JSON object in dit formaat:
       "priority": "high|medium|low",
       "title": "Korte titel",
       "description": "Uitleg waarom en verwacht effect",
-      "details": { /* type-specifieke details */ }
+      "details": { /* type-specifieke details, zie hieronder */ }
     }
   ]
-}`
+}
+
+## Verplichte details-velden per type
+Gebruik ALTIJD de exacte campagne- en ad group namen uit de data hierboven. Het systeem zoekt de Google IDs automatisch op.
+
+- **budget_change**: { "campaign_name": "exacte naam", "old_budget": 10.0, "new_budget": 15.0 }
+- **bid_adjustment**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "criterion_id": "keyword criterion id", "old_bid": 0.50, "new_bid": 0.65, "percent_change": 30 }
+- **keyword_negative**: { "campaign_name": "exacte naam", "keyword": "zoekterm", "match_type": "EXACT|PHRASE|BROAD" }
+- **pause_campaign**: { "campaign_name": "exacte naam" }
+- **keyword_add**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "keywords": ["kw1", "kw2"], "match_type": "PHRASE|EXACT|BROAD" }
+- **ad_text_change**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "headlines": ["headline1"], "descriptions": ["desc1"] }
+- **new_campaign**: { "name": "voorgestelde naam", "country": "nl", "type": "SEARCH|SHOPPING", "daily_budget": 10.0, "keywords": ["kw1"] }
+- **schedule_change**: { "campaign_name": "exacte naam", "schedule": "beschrijving van wijziging" }`
 
   const userMessage = `## Campagnes (laatste 7 dagen)
 ${JSON.stringify(campaigns, null, 2)}

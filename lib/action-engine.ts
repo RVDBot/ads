@@ -16,13 +16,39 @@ function errorToString(e: unknown): string {
   return String(e)
 }
 
+// Resolve Google IDs: customer_id from settings, campaign/adgroup/keyword IDs from DB
+function resolveGoogleIds(db: ReturnType<typeof getDb>, details: any) {
+  const customerId = getSetting('google_ads_customer_id')
+  if (!customerId) throw new Error('Google Ads customer ID niet geconfigureerd')
+
+  const resolved = { ...details, customer_id: customerId }
+
+  // If campaign_name is given but no google_campaign_id, look it up
+  if (details.campaign_name && !details.google_campaign_id) {
+    const camp = db.prepare('SELECT google_campaign_id, daily_budget FROM campaigns WHERE name = ?').get(details.campaign_name) as any
+    if (camp) {
+      resolved.google_campaign_id = camp.google_campaign_id
+      if (!resolved.old_budget) resolved.old_budget = camp.daily_budget
+    }
+  }
+
+  // If adgroup_name is given but no google_adgroup_id, look it up
+  if (details.adgroup_name && !details.google_adgroup_id) {
+    const ag = db.prepare('SELECT google_adgroup_id FROM ad_groups WHERE name = ?').get(details.adgroup_name) as any
+    if (ag) resolved.google_adgroup_id = ag.google_adgroup_id
+  }
+
+  return resolved
+}
+
 export async function applySuggestion(suggestionId: number, appliedBy: 'manual' | 'semi_auto' | 'full_auto' = 'manual'): Promise<void> {
   const db = getDb()
   const suggestion = db.prepare('SELECT * FROM ai_suggestions WHERE id = ?').get(suggestionId) as any
   if (!suggestion) throw new Error('Suggestie niet gevonden')
   if (suggestion.status === 'applied') throw new Error('Al toegepast')
 
-  const details = JSON.parse(suggestion.details)
+  const rawDetails = JSON.parse(suggestion.details)
+  const details = resolveGoogleIds(db, rawDetails)
 
   // Safety checks
   const maxBudgetChange = parseFloat(getSetting('safety_max_budget_change_day') || '50')
@@ -37,6 +63,7 @@ export async function applySuggestion(suggestionId: number, appliedBy: 'manual' 
       case 'budget_change': {
         const budgetDiff = Math.abs((details.new_budget || 0) - (details.old_budget || 0))
         if (budgetDiff > maxBudgetChange) throw new Error(`Budget wijziging €${budgetDiff} overschrijdt limiet €${maxBudgetChange}`)
+        if (!details.google_campaign_id) throw new Error('Campagne niet gevonden voor budget wijziging')
         oldValue = `€${details.old_budget}`
         newValue = `€${details.new_budget}`
         googleResponse = await applyBudgetChange(details)
@@ -51,11 +78,13 @@ export async function applySuggestion(suggestionId: number, appliedBy: 'manual' 
         break
       }
       case 'keyword_negative': {
+        if (!details.google_campaign_id) throw new Error('Campagne niet gevonden voor negatief zoekwoord')
         newValue = details.keyword
         googleResponse = await addNegativeKeyword(details)
         break
       }
       case 'pause_campaign': {
+        if (!details.google_campaign_id) throw new Error('Campagne niet gevonden om te pauzeren')
         oldValue = 'ENABLED'
         newValue = 'PAUSED'
         googleResponse = await pauseCampaign(details)
@@ -87,8 +116,8 @@ export async function applySuggestion(suggestionId: number, appliedBy: 'manual' 
     .run('applied', suggestionId)
 
   // Record ROAS before (for feedback loop)
-  if (details.campaign_id) {
-    const campaignDbId = db.prepare('SELECT id FROM campaigns WHERE google_campaign_id = ?').get(String(details.campaign_id)) as { id: number } | undefined
+  if (details.google_campaign_id) {
+    const campaignDbId = db.prepare('SELECT id FROM campaigns WHERE google_campaign_id = ?').get(String(details.google_campaign_id)) as { id: number } | undefined
     if (campaignDbId) {
       const currentRoas = db.prepare(`
         SELECT CASE WHEN SUM(cost) > 0 THEN SUM(conversion_value) / SUM(cost) ELSE 0 END as roas
@@ -104,14 +133,25 @@ export async function applySuggestion(suggestionId: number, appliedBy: 'manual' 
 }
 
 // Google Ads API action implementations
+// All functions use customer_id from settings (resolved by resolveGoogleIds)
+// and google_campaign_id / google_adgroup_id from the DB
+
 async function applyBudgetChange(details: any) {
   const { getGoogleAdsClient } = await import('./google-ads')
   const customer = getGoogleAdsClient()
+  // First query the budget resource name for this campaign
+  const [campaign] = await customer.query(`
+    SELECT campaign.id, campaign_budget.resource_name
+    FROM campaign
+    WHERE campaign.id = ${details.google_campaign_id}
+    LIMIT 1
+  `)
+  if (!campaign?.campaign_budget?.resource_name) throw new Error(`Budget niet gevonden voor campagne ${details.google_campaign_id}`)
   return customer.mutateResources([{
     entity: 'campaign_budget',
     operation: 'update',
     resource: {
-      resource_name: `customers/${details.customer_id}/campaignBudgets/${details.budget_id}`,
+      resource_name: campaign.campaign_budget.resource_name,
       amount_micros: Math.round((details.new_budget || 0) * 1_000_000),
     },
   }])
@@ -124,7 +164,7 @@ async function applyBidAdjustment(details: any) {
     entity: 'ad_group_criterion',
     operation: 'update',
     resource: {
-      resource_name: `customers/${details.customer_id}/adGroupCriteria/${details.adgroup_id}~${details.criterion_id}`,
+      resource_name: `customers/${details.customer_id}/adGroupCriteria/${details.google_adgroup_id}~${details.criterion_id}`,
       cpc_bid_micros: Math.round((details.new_bid || 0) * 1_000_000),
     },
   }])
@@ -137,7 +177,7 @@ async function addNegativeKeyword(details: any) {
     entity: 'campaign_criterion',
     operation: 'create',
     resource: {
-      campaign: `customers/${details.customer_id}/campaigns/${details.campaign_id}`,
+      campaign: `customers/${details.customer_id}/campaigns/${details.google_campaign_id}`,
       negative: true,
       keyword: { text: details.keyword, match_type: details.match_type || 'EXACT' },
     },
@@ -151,7 +191,7 @@ async function pauseCampaign(details: any) {
     entity: 'campaign',
     operation: 'update',
     resource: {
-      resource_name: `customers/${details.customer_id}/campaigns/${details.campaign_id}`,
+      resource_name: `customers/${details.customer_id}/campaigns/${details.google_campaign_id}`,
       status: 'PAUSED',
     },
   }])
@@ -165,7 +205,7 @@ async function addKeywords(details: any) {
     entity: 'ad_group_criterion' as const,
     operation: 'create' as const,
     resource: {
-      ad_group: `customers/${details.customer_id}/adGroups/${details.adgroup_id}`,
+      ad_group: `customers/${details.customer_id}/adGroups/${details.google_adgroup_id}`,
       keyword: { text: kw, match_type: details.match_type || 'PHRASE' },
     },
   })))
