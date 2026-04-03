@@ -2,6 +2,20 @@ import { getDb } from './db'
 import { getSetting } from './settings'
 import { log } from './logger'
 
+function errorToString(e: unknown): string {
+  if (e instanceof Error) return e.message
+  if (typeof e === 'string') return e
+  if (e && typeof e === 'object') {
+    const obj = e as Record<string, unknown>
+    if (Array.isArray(obj.errors)) {
+      return obj.errors.map((err: any) => err.message || JSON.stringify(err)).join('; ')
+    }
+    if (obj.message) return String(obj.message)
+    return JSON.stringify(e)
+  }
+  return String(e)
+}
+
 export async function applySuggestion(suggestionId: number, appliedBy: 'manual' | 'semi_auto' | 'full_auto' = 'manual'): Promise<void> {
   const db = getDb()
   const suggestion = db.prepare('SELECT * FROM ai_suggestions WHERE id = ?').get(suggestionId) as any
@@ -58,7 +72,7 @@ export async function applySuggestion(suggestionId: number, appliedBy: 'manual' 
       }
     }
   } catch (e) {
-    log('error', 'google-ads', `Suggestie ${suggestionId} toepassen mislukt`, { error: e instanceof Error ? e.message : String(e) })
+    log('error', 'google-ads', `Suggestie ${suggestionId} toepassen mislukt`, { error: errorToString(e) })
     throw e
   }
 
@@ -173,7 +187,7 @@ export async function autoApplySuggestions(): Promise<void> {
       try {
         await applySuggestion(s.id, autonomy === 'full_auto' ? 'full_auto' : 'semi_auto')
       } catch (e) {
-        log('error', 'google-ads', `Auto-apply mislukt voor suggestie ${s.id}`, { error: e instanceof Error ? e.message : String(e) })
+        log('error', 'google-ads', `Auto-apply mislukt voor suggestie ${s.id}`, { error: errorToString(e) })
       }
     }
   }
