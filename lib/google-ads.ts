@@ -206,9 +206,8 @@ export async function syncKeywordMetrics(dateRange: string = 'LAST_30_DAYS') {
       metrics.conversions,
       metrics.conversions_value,
       segments.date
-    FROM ad_group_criterion
-    WHERE ad_group_criterion.type = 'KEYWORD'
-    AND segments.date DURING ${dateRange}
+    FROM keyword_view
+    WHERE segments.date DURING ${dateRange}
     AND ad_group_criterion.status != 'REMOVED'
   `)
 
