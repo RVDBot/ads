@@ -286,9 +286,12 @@ export default function SettingsPage() {
               />
             </svg>
           </a>
-          <h1 className="text-[18px] font-bold text-text-primary">
+          <h1 className="text-[18px] font-bold text-text-primary flex-1">
             Instellingen
           </h1>
+          <span className="text-text-tertiary text-[11px]">
+            v{process.env.NEXT_PUBLIC_GIT_HASH || 'dev'}
+          </span>
         </div>
 
         <div className="space-y-3">

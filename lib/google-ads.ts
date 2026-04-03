@@ -83,41 +83,36 @@ export async function syncDailyMetrics(dateRange: string = 'LAST_30_DAYS') {
     AND campaign.status != 'REMOVED'
   `)
 
+  const findCampaign = db.prepare('SELECT id FROM campaigns WHERE google_campaign_id = ?')
   const stmt = db.prepare(`
     INSERT INTO daily_metrics (campaign_id, date, cost, clicks, impressions, conversions, conversion_value, roas, avg_cpc, ctr)
-    VALUES (
-      (SELECT id FROM campaigns WHERE google_campaign_id = ?),
-      ?, ?, ?, ?, ?, ?,
-      CASE WHEN ? > 0 THEN ? / ? ELSE 0 END,
-      CASE WHEN ? > 0 THEN ? / ? ELSE 0 END,
-      CASE WHEN ? > 0 THEN CAST(? AS REAL) / ? ELSE 0 END
-    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(campaign_id, date) DO UPDATE SET
       cost = excluded.cost, clicks = excluded.clicks, impressions = excluded.impressions,
       conversions = excluded.conversions, conversion_value = excluded.conversion_value,
       roas = excluded.roas, avg_cpc = excluded.avg_cpc, ctr = excluded.ctr
   `)
 
+  let skipped = 0
   const tx = db.transaction(() => {
     for (const row of rows) {
+      const camp = findCampaign.get(String(row.campaign?.id)) as { id: number } | undefined
+      if (!camp) { skipped++; continue }
       const cost = Number(row.metrics?.cost_micros || 0) / 1_000_000
       const clicks = Number(row.metrics?.clicks || 0)
       const impressions = Number(row.metrics?.impressions || 0)
       const conversions = Number(row.metrics?.conversions || 0)
       const convValue = Number(row.metrics?.conversions_value || 0)
+      const roas = cost > 0 ? convValue / cost : 0
+      const avgCpc = clicks > 0 ? cost / clicks : 0
+      const ctr = impressions > 0 ? clicks / impressions : 0
 
-      stmt.run(
-        String(row.campaign?.id), row.segments?.date,
-        cost, clicks, impressions, conversions, convValue,
-        cost, convValue, cost,  // for ROAS calc
-        clicks, cost, clicks,   // for avg_cpc calc
-        impressions, clicks, impressions  // for CTR calc
-      )
+      stmt.run(camp.id, row.segments?.date, cost, clicks, impressions, conversions, convValue, roas, avgCpc, ctr)
     }
   })
   tx()
 
-  log('info', 'google-ads', `${rows.length} dagelijkse metric-rijen gesynchroniseerd`)
+  log('info', 'google-ads', `${rows.length - skipped} dagelijkse metric-rijen gesynchroniseerd${skipped ? ` (${skipped} overgeslagen)` : ''}`)
 }
 
 export async function syncAdGroups() {
@@ -134,21 +129,25 @@ export async function syncAdGroups() {
     WHERE ad_group.status != 'REMOVED'
   `)
 
+  const findCampaign = db.prepare('SELECT id FROM campaigns WHERE google_campaign_id = ?')
   const stmt = db.prepare(`
     INSERT INTO ad_groups (google_adgroup_id, campaign_id, name, status)
-    VALUES (?, (SELECT id FROM campaigns WHERE google_campaign_id = ?), ?, ?)
+    VALUES (?, ?, ?, ?)
     ON CONFLICT(google_adgroup_id) DO UPDATE SET
       name = excluded.name, status = excluded.status
   `)
 
+  let skipped = 0
   const tx = db.transaction(() => {
     for (const row of rows) {
-      stmt.run(String(row.ad_group?.id), String(row.campaign?.id), row.ad_group?.name, String(row.ad_group?.status || 'ENABLED'))
+      const camp = findCampaign.get(String(row.campaign?.id)) as { id: number } | undefined
+      if (!camp) { skipped++; continue }
+      stmt.run(String(row.ad_group?.id), camp.id, row.ad_group?.name, String(row.ad_group?.status || 'ENABLED'))
     }
   })
   tx()
 
-  log('info', 'google-ads', `${rows.length} ad groups gesynchroniseerd`)
+  log('info', 'google-ads', `${rows.length - skipped} ad groups gesynchroniseerd${skipped ? ` (${skipped} overgeslagen, campaign niet gevonden)` : ''}`)
 }
 
 export async function syncKeywords() {
@@ -168,18 +167,22 @@ export async function syncKeywords() {
     AND ad_group_criterion.status != 'REMOVED'
   `)
 
+  const findAdGroup = db.prepare('SELECT id FROM ad_groups WHERE google_adgroup_id = ?')
   const stmt = db.prepare(`
     INSERT INTO keywords (google_keyword_id, adgroup_id, text, match_type, bid, status)
-    VALUES (?, (SELECT id FROM ad_groups WHERE google_adgroup_id = ?), ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(google_keyword_id) DO UPDATE SET
       text = excluded.text, match_type = excluded.match_type, bid = excluded.bid, status = excluded.status
   `)
 
+  let skipped = 0
   const tx = db.transaction(() => {
     for (const row of rows) {
+      const ag = findAdGroup.get(String(row.ad_group?.id)) as { id: number } | undefined
+      if (!ag) { skipped++; continue }
       const bid = row.ad_group_criterion?.cpc_bid_micros ? Number(row.ad_group_criterion.cpc_bid_micros) / 1_000_000 : null
       stmt.run(
-        String(row.ad_group_criterion?.criterion_id), String(row.ad_group?.id),
+        String(row.ad_group_criterion?.criterion_id), ag.id,
         row.ad_group_criterion?.keyword?.text, String(row.ad_group_criterion?.keyword?.match_type || 'BROAD'),
         bid, String(row.ad_group_criterion?.status || 'ENABLED')
       )
@@ -187,7 +190,7 @@ export async function syncKeywords() {
   })
   tx()
 
-  log('info', 'google-ads', `${rows.length} zoekwoorden gesynchroniseerd`)
+  log('info', 'google-ads', `${rows.length - skipped} zoekwoorden gesynchroniseerd${skipped ? ` (${skipped} overgeslagen)` : ''}`)
 }
 
 export async function syncKeywordMetrics(dateRange: string = 'LAST_30_DAYS') {
@@ -209,18 +212,22 @@ export async function syncKeywordMetrics(dateRange: string = 'LAST_30_DAYS') {
     AND ad_group_criterion.status != 'REMOVED'
   `)
 
+  const findKeyword = db.prepare('SELECT id FROM keywords WHERE google_keyword_id = ?')
   const stmt = db.prepare(`
     INSERT INTO keyword_metrics (keyword_id, date, cost, clicks, impressions, conversions, conversion_value)
-    VALUES ((SELECT id FROM keywords WHERE google_keyword_id = ?), ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(keyword_id, date) DO UPDATE SET
       cost = excluded.cost, clicks = excluded.clicks, impressions = excluded.impressions,
       conversions = excluded.conversions, conversion_value = excluded.conversion_value
   `)
 
+  let skipped = 0
   const tx = db.transaction(() => {
     for (const row of rows) {
+      const kw = findKeyword.get(String(row.ad_group_criterion?.criterion_id)) as { id: number } | undefined
+      if (!kw) { skipped++; continue }
       stmt.run(
-        String(row.ad_group_criterion?.criterion_id), row.segments?.date,
+        kw.id, row.segments?.date,
         Number(row.metrics?.cost_micros || 0) / 1_000_000,
         Number(row.metrics?.clicks || 0), Number(row.metrics?.impressions || 0),
         Number(row.metrics?.conversions || 0), Number(row.metrics?.conversions_value || 0)
@@ -229,7 +236,7 @@ export async function syncKeywordMetrics(dateRange: string = 'LAST_30_DAYS') {
   })
   tx()
 
-  log('info', 'google-ads', `${rows.length} keyword metric-rijen gesynchroniseerd`)
+  log('info', 'google-ads', `${rows.length - skipped} keyword metric-rijen gesynchroniseerd${skipped ? ` (${skipped} overgeslagen)` : ''}`)
 }
 
 export async function syncSearchTerms(dateRange: string = 'LAST_30_DAYS') {
@@ -249,15 +256,19 @@ export async function syncSearchTerms(dateRange: string = 'LAST_30_DAYS') {
     WHERE segments.date DURING ${dateRange}
   `)
 
+  const findCampaign = db.prepare('SELECT id FROM campaigns WHERE google_campaign_id = ?')
   const stmt = db.prepare(`
     INSERT INTO search_terms (campaign_id, search_term, date, cost, clicks, conversions, conversion_value)
-    VALUES ((SELECT id FROM campaigns WHERE google_campaign_id = ?), ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `)
 
+  let skipped = 0
   const tx = db.transaction(() => {
     for (const row of rows) {
+      const camp = findCampaign.get(String(row.campaign?.id)) as { id: number } | undefined
+      if (!camp) { skipped++; continue }
       stmt.run(
-        String(row.campaign?.id), row.search_term_view?.search_term, row.segments?.date,
+        camp.id, row.search_term_view?.search_term, row.segments?.date,
         Number(row.metrics?.cost_micros || 0) / 1_000_000,
         Number(row.metrics?.clicks || 0), Number(row.metrics?.conversions || 0),
         Number(row.metrics?.conversions_value || 0)
@@ -266,7 +277,7 @@ export async function syncSearchTerms(dateRange: string = 'LAST_30_DAYS') {
   })
   tx()
 
-  log('info', 'google-ads', `${rows.length} zoektermen gesynchroniseerd`)
+  log('info', 'google-ads', `${rows.length - skipped} zoektermen gesynchroniseerd${skipped ? ` (${skipped} overgeslagen)` : ''}`)
 }
 
 export async function syncAds() {
@@ -285,19 +296,23 @@ export async function syncAds() {
     AND ad_group_ad.status != 'REMOVED'
   `)
 
+  const findAdGroup = db.prepare('SELECT id FROM ad_groups WHERE google_adgroup_id = ?')
   const stmt = db.prepare(`
     INSERT INTO ads (google_ad_id, adgroup_id, headlines, descriptions, status)
-    VALUES (?, (SELECT id FROM ad_groups WHERE google_adgroup_id = ?), ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(google_ad_id) DO UPDATE SET
       headlines = excluded.headlines, descriptions = excluded.descriptions, status = excluded.status
   `)
 
+  let skipped = 0
   const tx = db.transaction(() => {
     for (const row of rows) {
+      const ag = findAdGroup.get(String(row.ad_group?.id)) as { id: number } | undefined
+      if (!ag) { skipped++; continue }
       const headlines = (row.ad_group_ad?.ad?.responsive_search_ad?.headlines || []).map((h: any) => h.text)
       const descriptions = (row.ad_group_ad?.ad?.responsive_search_ad?.descriptions || []).map((d: any) => d.text)
       stmt.run(
-        String(row.ad_group_ad?.ad?.id), String(row.ad_group?.id),
+        String(row.ad_group_ad?.ad?.id), ag.id,
         JSON.stringify(headlines), JSON.stringify(descriptions),
         String(row.ad_group_ad?.status || 'ENABLED')
       )
@@ -305,7 +320,7 @@ export async function syncAds() {
   })
   tx()
 
-  log('info', 'google-ads', `${rows.length} advertenties gesynchroniseerd`)
+  log('info', 'google-ads', `${rows.length - skipped} advertenties gesynchroniseerd${skipped ? ` (${skipped} overgeslagen)` : ''}`)
 }
 
 export async function syncAdMetrics(dateRange: string = 'LAST_30_DAYS') {
@@ -325,17 +340,21 @@ export async function syncAdMetrics(dateRange: string = 'LAST_30_DAYS') {
     AND ad_group_ad.status != 'REMOVED'
   `)
 
+  const findAd = db.prepare('SELECT id FROM ads WHERE google_ad_id = ?')
   const stmt = db.prepare(`
     INSERT INTO ad_metrics (ad_id, date, cost, clicks, impressions, conversions)
-    VALUES ((SELECT id FROM ads WHERE google_ad_id = ?), ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(ad_id, date) DO UPDATE SET
       cost = excluded.cost, clicks = excluded.clicks, impressions = excluded.impressions, conversions = excluded.conversions
   `)
 
+  let skipped = 0
   const tx = db.transaction(() => {
     for (const row of rows) {
+      const ad = findAd.get(String(row.ad_group_ad?.ad?.id)) as { id: number } | undefined
+      if (!ad) { skipped++; continue }
       stmt.run(
-        String(row.ad_group_ad?.ad?.id), row.segments?.date,
+        ad.id, row.segments?.date,
         Number(row.metrics?.cost_micros || 0) / 1_000_000,
         Number(row.metrics?.clicks || 0), Number(row.metrics?.impressions || 0),
         Number(row.metrics?.conversions || 0)
@@ -344,5 +363,5 @@ export async function syncAdMetrics(dateRange: string = 'LAST_30_DAYS') {
   })
   tx()
 
-  log('info', 'google-ads', `${rows.length} ad metric-rijen gesynchroniseerd`)
+  log('info', 'google-ads', `${rows.length - skipped} ad metric-rijen gesynchroniseerd${skipped ? ` (${skipped} overgeslagen)` : ''}`)
 }
