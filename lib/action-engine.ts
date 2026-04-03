@@ -17,6 +17,45 @@ function errorToString(e: unknown): string {
 }
 
 // Resolve Google IDs: customer_id from settings, campaign/adgroup/keyword IDs from DB
+function findCampaignByName(db: ReturnType<typeof getDb>, name: string) {
+  // Try exact match first
+  let camp = db.prepare('SELECT google_campaign_id, daily_budget, name FROM campaigns WHERE name = ?').get(name) as any
+  if (camp) return camp
+
+  // Try case-insensitive match
+  camp = db.prepare('SELECT google_campaign_id, daily_budget, name FROM campaigns WHERE name COLLATE NOCASE = ?').get(name) as any
+  if (camp) return camp
+
+  // Try LIKE match (AI might abbreviate or slightly differ)
+  camp = db.prepare('SELECT google_campaign_id, daily_budget, name FROM campaigns WHERE name LIKE ?').get(`%${name}%`) as any
+  if (camp) return camp
+
+  // Try reverse: campaign name contains the search term, or search term contains campaign name
+  const allCamps = db.prepare('SELECT google_campaign_id, daily_budget, name FROM campaigns').all() as any[]
+  const nameLower = name.toLowerCase()
+  return allCamps.find((c: any) => nameLower.includes(c.name.toLowerCase())) || null
+}
+
+function findAdGroupByName(db: ReturnType<typeof getDb>, name: string, googleCampaignId?: string) {
+  const params: string[] = [name]
+  let sql = 'SELECT google_adgroup_id, name FROM ad_groups WHERE name = ?'
+  if (googleCampaignId) {
+    sql += ' AND campaign_id = (SELECT id FROM campaigns WHERE google_campaign_id = ?)'
+    params.push(googleCampaignId)
+  }
+  let ag = db.prepare(sql).get(...params) as any
+  if (ag) return ag
+
+  // Case-insensitive fallback
+  ag = db.prepare(sql.replace('name = ?', 'name COLLATE NOCASE = ?')).get(...params) as any
+  if (ag) return ag
+
+  // LIKE fallback
+  params[0] = `%${name}%`
+  ag = db.prepare(sql.replace('name = ?', 'name LIKE ?')).get(...params) as any
+  return ag || null
+}
+
 function resolveGoogleIds(db: ReturnType<typeof getDb>, details: any) {
   const customerId = getSetting('google_ads_customer_id')
   if (!customerId) throw new Error('Google Ads customer ID niet geconfigureerd')
@@ -25,17 +64,24 @@ function resolveGoogleIds(db: ReturnType<typeof getDb>, details: any) {
 
   // If campaign_name is given but no google_campaign_id, look it up
   if (details.campaign_name && !details.google_campaign_id) {
-    const camp = db.prepare('SELECT google_campaign_id, daily_budget FROM campaigns WHERE name = ?').get(details.campaign_name) as any
+    const camp = findCampaignByName(db, details.campaign_name)
     if (camp) {
       resolved.google_campaign_id = camp.google_campaign_id
       if (!resolved.old_budget) resolved.old_budget = camp.daily_budget
+      log('info', 'google-ads', `Campagne gevonden: "${camp.name}" voor zoeknaam "${details.campaign_name}"`)
+    } else {
+      log('warn', 'google-ads', `Campagne niet gevonden voor naam: "${details.campaign_name}"`)
     }
   }
 
   // If adgroup_name is given but no google_adgroup_id, look it up
   if (details.adgroup_name && !details.google_adgroup_id) {
-    const ag = db.prepare('SELECT google_adgroup_id FROM ad_groups WHERE name = ?').get(details.adgroup_name) as any
-    if (ag) resolved.google_adgroup_id = ag.google_adgroup_id
+    const ag = findAdGroupByName(db, details.adgroup_name, resolved.google_campaign_id)
+    if (ag) {
+      resolved.google_adgroup_id = ag.google_adgroup_id
+    } else {
+      log('warn', 'google-ads', `Ad group niet gevonden voor naam: "${details.adgroup_name}"`)
+    }
   }
 
   return resolved
