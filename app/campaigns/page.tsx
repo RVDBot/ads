@@ -219,6 +219,7 @@ export default function CampaignsPage() {
                 <tr className="border-b border-border-subtle">
                   {([
                     { key: 'name', label: 'Naam', align: 'left' },
+                    { key: 'status', label: 'Status', align: 'left' },
                     { key: 'type', label: 'Type', align: 'left' },
                     { key: 'target_countries', label: 'Target', align: 'left' },
                     { key: 'daily_budget', label: 'Budget/dag', align: 'right' },
@@ -247,12 +248,13 @@ export default function CampaignsPage() {
                     } hover:bg-surface-hover`}
                     style={{ animationDelay: `${i * 30}ms` }}>
                     <td className="px-4 py-2.5 text-[13px] font-medium text-text-primary max-w-[250px]">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: statusDotColor(c.status) }}
-                          title={c.status} />
-                        <span className="truncate">{c.name}</span>
-                      </div>
+                      <span className="truncate block">{c.name}</span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColors[c.status] || 'bg-surface-3 text-text-tertiary'}`}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: statusDotColor(c.status) }} />
+                        {c.status === 'ENABLED' ? 'Live' : c.status === 'PAUSED' ? 'Gepauzeerd' : c.status}
+                      </span>
                     </td>
                     <td className="px-4 py-2.5">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${typeColors[c.type] || 'bg-surface-3 text-text-tertiary'}`}>
