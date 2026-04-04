@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   const db = getDb()
 
   const actions = db.prepare(`
-    SELECT al.*, s.title as suggestion_title, s.description as suggestion_description, s.priority
+    SELECT al.*, s.title as suggestion_title, s.description as suggestion_description, s.priority, s.details as suggestion_details
     FROM action_log al
     LEFT JOIN ai_suggestions s ON s.id = al.suggestion_id
     ORDER BY al.created_at DESC

@@ -16,6 +16,7 @@ interface ActionEntry {
   google_response: string | null
   suggestion_title: string | null
   suggestion_description: string | null
+  suggestion_details: string | null
   priority: string | null
 }
 
@@ -125,6 +126,10 @@ export default function ActionsPage() {
                 if (action.google_response) {
                   try { googleResp = JSON.parse(action.google_response) } catch { /* empty */ }
                 }
+                let suggestionDetails: Record<string, unknown> | null = null
+                if (action.suggestion_details) {
+                  try { suggestionDetails = JSON.parse(action.suggestion_details) } catch { /* empty */ }
+                }
 
                 return (
                   <div key={action.id}
@@ -183,6 +188,15 @@ export default function ActionsPage() {
                           </div>
                         )}
 
+                        {suggestionDetails && (
+                          <div className="mt-2">
+                            <div className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-1">Actie Data</div>
+                            <pre className="text-[11px] text-text-secondary bg-surface-2 rounded-lg p-3 overflow-x-auto">
+                              {JSON.stringify(suggestionDetails, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+
                         {googleResp && (
                           <div className="mt-2">
                             <div className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-1">Google Ads Response</div>
@@ -192,7 +206,7 @@ export default function ActionsPage() {
                           </div>
                         )}
 
-                        {!action.suggestion_title && !googleResp && (
+                        {!action.suggestion_title && !googleResp && !suggestionDetails && (
                           <div className="text-[11px] text-text-tertiary">Geen extra details beschikbaar.</div>
                         )}
                       </div>
