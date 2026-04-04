@@ -225,8 +225,8 @@ Analyseer deze data en geef je suggesties als JSON.`
     stmtSuggestion.run(analysisId, s.type, s.priority, s.title, s.description, JSON.stringify(s.details))
   }
 
-  db.prepare('INSERT INTO token_usage (analysis_id, call_type, input_tokens, output_tokens) VALUES (?, ?, ?, ?)')
-    .run(analysisId, 'analysis', response.usage.input_tokens, response.usage.output_tokens)
+  db.prepare('INSERT INTO token_usage (analysis_id, call_type, model, input_tokens, output_tokens) VALUES (?, ?, ?, ?, ?)')
+    .run(analysisId, 'analysis', model, response.usage.input_tokens, response.usage.output_tokens)
 
   log('info', 'ai', `Analyse voltooid: ${parsed.suggestions.length} suggesties`, {
     analysisId, findings: parsed.findings.length, suggestions: parsed.suggestions.length, tokens: response.usage

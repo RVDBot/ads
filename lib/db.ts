@@ -198,6 +198,7 @@ function initSchema(db: Database.Database) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       analysis_id INTEGER,
       call_type TEXT NOT NULL,
+      model TEXT,
       input_tokens INTEGER NOT NULL DEFAULT 0,
       output_tokens INTEGER NOT NULL DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -218,5 +219,10 @@ function initSchema(db: Database.Database) {
   const cols = db.prepare("PRAGMA table_info(campaigns)").all() as Array<{ name: string }>
   if (!cols.some(c => c.name === 'target_countries')) {
     db.exec('ALTER TABLE campaigns ADD COLUMN target_countries TEXT')
+  }
+
+  const tuCols = db.prepare("PRAGMA table_info(token_usage)").all() as Array<{ name: string }>
+  if (!tuCols.some(c => c.name === 'model')) {
+    db.exec('ALTER TABLE token_usage ADD COLUMN model TEXT')
   }
 }

@@ -8,10 +8,24 @@ import LogViewer from '@/components/LogViewer'
 // Types
 // -------------------------------------------------------------------
 
+interface ModelBreakdown {
+  model: string
+  input: number
+  output: number
+  cost: number
+}
+
+interface TokenBucket {
+  input: number
+  output: number
+  cost: number
+  models: ModelBreakdown[]
+}
+
 interface TokenUsage {
-  total: { input: number; output: number }
-  last7d: { input: number; output: number }
-  last30d: { input: number; output: number }
+  total: TokenBucket
+  last7d: TokenBucket
+  last30d: TokenBucket
 }
 
 // -------------------------------------------------------------------
@@ -305,7 +319,7 @@ export default function SettingsPage() {
                     ['Totaal', tokenUsage.total],
                     ['Laatste 7 dagen', tokenUsage.last7d],
                     ['Laatste 30 dagen', tokenUsage.last30d],
-                  ] as [string, { input: number; output: number }][]
+                  ] as [string, TokenBucket][]
                 ).map(([label, data]) => (
                   <div
                     key={label}
@@ -321,6 +335,21 @@ export default function SettingsPage() {
                       In: {formatTokens(data.input)} / Out:{' '}
                       {formatTokens(data.output)}
                     </div>
+                    <div className="text-accent text-[12px] font-semibold mt-1">
+                      ${data.cost.toFixed(4)}
+                    </div>
+                    {data.models.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-border-subtle space-y-1">
+                        {data.models.map(m => (
+                          <div key={m.model} className="flex justify-between items-center text-[10px]">
+                            <span className="text-text-secondary truncate mr-2">{m.model.replace('claude-', '')}</span>
+                            <span className="text-text-tertiary shrink-0">
+                              {formatTokens(m.input + m.output)} · ${m.cost.toFixed(4)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

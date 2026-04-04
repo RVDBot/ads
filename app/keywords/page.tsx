@@ -39,6 +39,11 @@ interface Waster {
   clicks: number
 }
 
+const MATCH_TYPE_MAP: Record<string, string> = {
+  '2': 'EXACT', '3': 'PHRASE', '4': 'BROAD',
+  EXACT: 'EXACT', PHRASE: 'PHRASE', BROAD: 'BROAD',
+}
+
 const matchTypeColors: Record<string, string> = {
   EXACT: 'bg-accent-subtle text-accent',
   PHRASE: 'bg-success-subtle text-success',
@@ -53,6 +58,19 @@ export default function KeywordsPage() {
   const [searchTerms, setSearchTerms] = useState<SearchTerm[]>([])
   const [wasters, setWasters] = useState<Waster[]>([])
   const [loading, setLoading] = useState(true)
+  const [kwSort, setKwSort] = useState<string>('cost')
+  const [kwDir, setKwDir] = useState<'asc' | 'desc'>('desc')
+  const [stSort, setStSort] = useState<string>('cost')
+  const [stDir, setStDir] = useState<'asc' | 'desc'>('desc')
+
+  function handleKwSort(key: string) {
+    if (kwSort === key) { setKwDir(kwDir === 'desc' ? 'asc' : 'desc') }
+    else { setKwSort(key); setKwDir(key === 'text' || key === 'campaign' ? 'asc' : 'desc') }
+  }
+  function handleStSort(key: string) {
+    if (stSort === key) { setStDir(stDir === 'desc' ? 'asc' : 'desc') }
+    else { setStSort(key); setStDir(key === 'search_term' ? 'asc' : 'desc') }
+  }
 
   useEffect(() => {
     setLoading(true)
@@ -68,6 +86,30 @@ export default function KeywordsPage() {
       })
       .catch(() => setLoading(false))
   }, [country, period])
+
+  function sortList<T>(list: T[], key: string, dir: 'asc' | 'desc'): T[] {
+    return [...list].sort((a, b) => {
+      const aVal = (a as Record<string, unknown>)[key] ?? ''
+      const bVal = (b as Record<string, unknown>)[key] ?? ''
+      const cmp = typeof aVal === 'string' ? aVal.localeCompare(bVal as string) : (aVal as number) - (bVal as number)
+      return dir === 'desc' ? -cmp : cmp
+    })
+  }
+
+  const sortedKw = sortList(keywords, kwSort, kwDir)
+  const sortedSt = sortList(searchTerms, stSort, stDir)
+
+  function SortHeader({ label, sortKey, currentSort, currentDir, onSort, align = 'left' }: {
+    label: string; sortKey: string; currentSort: string; currentDir: 'asc' | 'desc'; onSort: (k: string) => void; align?: string
+  }) {
+    return (
+      <th onClick={() => onSort(sortKey)}
+        className={`text-${align} text-[11px] font-medium text-text-tertiary px-4 py-2.5 cursor-pointer hover:text-text-secondary select-none`}>
+        {label}
+        {currentSort === sortKey && <span className="ml-0.5">{currentDir === 'desc' ? ' \u2193' : ' \u2191'}</span>}
+      </th>
+    )
+  }
 
   return (
     <>
@@ -114,41 +156,44 @@ export default function KeywordsPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border-subtle">
-                    <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2.5">Zoekwoord</th>
-                    <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2.5">Match</th>
-                    <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2.5">Campagne</th>
-                    <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2.5">Land</th>
-                    <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">Bod</th>
-                    <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">Kosten</th>
-                    <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">Klikken</th>
-                    <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">Conv.</th>
-                    <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">ROAS</th>
+                    <SortHeader label="Zoekwoord" sortKey="text" currentSort={kwSort} currentDir={kwDir} onSort={handleKwSort} />
+                    <SortHeader label="Match" sortKey="match_type" currentSort={kwSort} currentDir={kwDir} onSort={handleKwSort} />
+                    <SortHeader label="Campagne" sortKey="campaign" currentSort={kwSort} currentDir={kwDir} onSort={handleKwSort} />
+                    <SortHeader label="Land" sortKey="country" currentSort={kwSort} currentDir={kwDir} onSort={handleKwSort} />
+                    <SortHeader label="Bod" sortKey="bid" currentSort={kwSort} currentDir={kwDir} onSort={handleKwSort} align="right" />
+                    <SortHeader label="Kosten" sortKey="cost" currentSort={kwSort} currentDir={kwDir} onSort={handleKwSort} align="right" />
+                    <SortHeader label="Klikken" sortKey="clicks" currentSort={kwSort} currentDir={kwDir} onSort={handleKwSort} align="right" />
+                    <SortHeader label="Conv." sortKey="conversions" currentSort={kwSort} currentDir={kwDir} onSort={handleKwSort} align="right" />
+                    <SortHeader label="ROAS" sortKey="roas" currentSort={kwSort} currentDir={kwDir} onSort={handleKwSort} align="right" />
                   </tr>
                 </thead>
                 <tbody>
-                  {keywords.map((k, i) => (
-                    <tr key={i}
-                      className={`border-b border-border-subtle transition-colors ${
-                        i % 2 === 0 ? 'bg-surface-1' : 'bg-surface-0/50'
-                      } hover:bg-surface-hover animate-row`}
-                      style={{ animationDelay: `${i * 20}ms` }}>
-                      <td className="px-4 py-2.5 text-[13px] font-medium text-text-primary max-w-[200px] truncate">{k.text}</td>
-                      <td className="px-4 py-2.5">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${matchTypeColors[k.match_type] || 'bg-surface-3 text-text-tertiary'}`}>
-                          {k.match_type}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-[12px] text-text-secondary truncate max-w-[150px]">{k.campaign}</td>
-                      <td className="px-4 py-2.5 text-[13px]">{k.country ? countryFlag(k.country) : '—'}</td>
-                      <td className="px-4 py-2.5 text-[12px] text-right text-text-secondary">{k.bid ? formatCurrency(k.bid) : '—'}</td>
-                      <td className="px-4 py-2.5 text-[13px] text-right font-medium text-text-primary">{formatCurrency(k.cost || 0)}</td>
-                      <td className="px-4 py-2.5 text-[13px] text-right text-text-secondary">{k.clicks || 0}</td>
-                      <td className="px-4 py-2.5 text-[13px] text-right text-text-secondary">{Math.round(k.conversions || 0)}</td>
-                      <td className={`px-4 py-2.5 text-[13px] text-right font-semibold ${(k.roas || 0) >= 3 ? 'text-success' : (k.roas || 0) >= 1 ? 'text-warning' : 'text-danger'}`}>
-                        {formatRoas(k.roas || 0)}
-                      </td>
-                    </tr>
-                  ))}
+                  {sortedKw.map((k, i) => {
+                    const mt = MATCH_TYPE_MAP[k.match_type] || k.match_type
+                    return (
+                      <tr key={i}
+                        className={`border-b border-border-subtle transition-colors ${
+                          i % 2 === 0 ? 'bg-surface-1' : 'bg-surface-0/50'
+                        } hover:bg-surface-hover animate-row`}
+                        style={{ animationDelay: `${i * 20}ms` }}>
+                        <td className="px-4 py-2.5 text-[13px] font-medium text-text-primary max-w-[200px] truncate">{k.text}</td>
+                        <td className="px-4 py-2.5">
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${matchTypeColors[mt] || 'bg-surface-3 text-text-tertiary'}`}>
+                            {mt}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-[12px] text-text-secondary truncate max-w-[150px]">{k.campaign}</td>
+                        <td className="px-4 py-2.5 text-[13px]">{k.country ? countryFlag(k.country) : '\u2014'}</td>
+                        <td className="px-4 py-2.5 text-[12px] text-right text-text-secondary">{k.bid ? formatCurrency(k.bid) : '\u2014'}</td>
+                        <td className="px-4 py-2.5 text-[13px] text-right font-medium text-text-primary">{formatCurrency(k.cost || 0)}</td>
+                        <td className="px-4 py-2.5 text-[13px] text-right text-text-secondary">{k.clicks || 0}</td>
+                        <td className="px-4 py-2.5 text-[13px] text-right text-text-secondary">{Math.round(k.conversions || 0)}</td>
+                        <td className={`px-4 py-2.5 text-[13px] text-right font-semibold ${(k.roas || 0) >= 3 ? 'text-success' : (k.roas || 0) >= 1 ? 'text-warning' : 'text-danger'}`}>
+                          {formatRoas(k.roas || 0)}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             )}
@@ -170,15 +215,15 @@ export default function KeywordsPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border-subtle">
-                    <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2.5">Zoekterm</th>
-                    <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">Kosten</th>
-                    <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">Klikken</th>
-                    <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">Conversies</th>
-                    <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">Waarde</th>
+                    <SortHeader label="Zoekterm" sortKey="search_term" currentSort={stSort} currentDir={stDir} onSort={handleStSort} />
+                    <SortHeader label="Kosten" sortKey="cost" currentSort={stSort} currentDir={stDir} onSort={handleStSort} align="right" />
+                    <SortHeader label="Klikken" sortKey="clicks" currentSort={stSort} currentDir={stDir} onSort={handleStSort} align="right" />
+                    <SortHeader label="Conversies" sortKey="conversions" currentSort={stSort} currentDir={stDir} onSort={handleStSort} align="right" />
+                    <SortHeader label="Waarde" sortKey="value" currentSort={stSort} currentDir={stDir} onSort={handleStSort} align="right" />
                   </tr>
                 </thead>
                 <tbody>
-                  {searchTerms.map((st, i) => (
+                  {sortedSt.map((st, i) => (
                     <tr key={i}
                       className={`border-b border-border-subtle transition-colors ${
                         i % 2 === 0 ? 'bg-surface-1' : 'bg-surface-0/50'
@@ -217,19 +262,22 @@ export default function KeywordsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {wasters.map((w, i) => (
-                    <tr key={i} className="border-b border-danger/10 last:border-0">
-                      <td className="px-4 py-2.5 text-[13px] font-medium text-text-primary">{w.text}</td>
-                      <td className="px-4 py-2.5">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${matchTypeColors[w.match_type] || 'bg-surface-3 text-text-tertiary'}`}>
-                          {w.match_type}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-[12px] text-text-secondary truncate max-w-[200px]">{w.campaign}</td>
-                      <td className="px-4 py-2.5 text-[13px] text-right font-semibold text-danger">{formatCurrency(w.cost || 0)}</td>
-                      <td className="px-4 py-2.5 text-[13px] text-right text-text-secondary">{w.clicks || 0}</td>
-                    </tr>
-                  ))}
+                  {wasters.map((w, i) => {
+                    const mt = MATCH_TYPE_MAP[w.match_type] || w.match_type
+                    return (
+                      <tr key={i} className="border-b border-danger/10 last:border-0">
+                        <td className="px-4 py-2.5 text-[13px] font-medium text-text-primary">{w.text}</td>
+                        <td className="px-4 py-2.5">
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${matchTypeColors[mt] || 'bg-surface-3 text-text-tertiary'}`}>
+                            {mt}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-[12px] text-text-secondary truncate max-w-[200px]">{w.campaign}</td>
+                        <td className="px-4 py-2.5 text-[13px] text-right font-semibold text-danger">{formatCurrency(w.cost || 0)}</td>
+                        <td className="px-4 py-2.5 text-[13px] text-right text-text-secondary">{w.clicks || 0}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

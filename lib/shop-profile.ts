@@ -59,8 +59,8 @@ Geef het profiel als gestructureerde markdown.`
     ON CONFLICT(country) DO UPDATE SET profile_content = excluded.profile_content, last_crawled_at = CURRENT_TIMESTAMP
   `).run(country, profile)
 
-  db.prepare('INSERT INTO token_usage (call_type, input_tokens, output_tokens) VALUES (?, ?, ?)')
-    .run('shop_profile', response.usage.input_tokens, response.usage.output_tokens)
+  db.prepare('INSERT INTO token_usage (call_type, model, input_tokens, output_tokens) VALUES (?, ?, ?, ?)')
+    .run('shop_profile', model, response.usage.input_tokens, response.usage.output_tokens)
 
   log('info', 'ai', `Shop profiel gegenereerd voor ${country}`, { tokens: response.usage })
   return profile
