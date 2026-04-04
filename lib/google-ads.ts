@@ -111,6 +111,65 @@ export async function syncCampaigns() {
   tx()
 
   log('info', 'google-ads', `${campaigns.length} campagnes gesynchroniseerd`)
+
+  // Sync geo targeting per campaign
+  await syncGeoTargets()
+}
+
+// Geo target constant ID → country code mapping
+// Source: https://developers.google.com/google-ads/api/reference/data/geotargets
+const GEO_TARGET_COUNTRIES: Record<number, string> = {
+  2528: 'NL', 2276: 'DE', 2250: 'FR', 2724: 'ES', 2380: 'IT',
+  2040: 'AT', 2056: 'BE', 2756: 'CH', 2208: 'DK', 2826: 'GB',
+  2840: 'US', 2124: 'CA', 2036: 'AU', 2616: 'PL', 2203: 'CZ',
+  2348: 'HU', 2620: 'PT', 2752: 'SE', 2578: 'NO', 2246: 'FI',
+  2372: 'IE', 2300: 'GR', 2642: 'RO', 2100: 'BG', 2191: 'HR',
+  2705: 'SI', 2703: 'SK', 2440: 'LT', 2428: 'LV', 2233: 'EE',
+  2442: 'LU', 2470: 'MT', 2196: 'CY',
+}
+
+async function syncGeoTargets() {
+  const customer = getClient()
+  const db = getDb()
+
+  const rows = await customer.query(`
+    SELECT
+      campaign.id,
+      campaign_criterion.location.geo_target_constant
+    FROM campaign_criterion
+    WHERE campaign_criterion.type = 'LOCATION'
+    AND campaign_criterion.negative = false
+    AND campaign.status != 'REMOVED'
+  `)
+
+  // Group by campaign
+  const campTargets: Record<string, string[]> = {}
+  for (const row of rows) {
+    const campId = String(row.campaign?.id)
+    const geoConstant = row.campaign_criterion?.location?.geo_target_constant
+    if (!campId || !geoConstant) continue
+
+    // Extract ID from resource name like "geoTargetConstants/2528"
+    const geoId = parseInt(String(geoConstant).split('/').pop() || '', 10)
+    const countryCode = GEO_TARGET_COUNTRIES[geoId]
+    if (!countryCode) continue
+
+    if (!campTargets[campId]) campTargets[campId] = []
+    if (!campTargets[campId].includes(countryCode)) {
+      campTargets[campId].push(countryCode)
+    }
+  }
+
+  // Update campaigns
+  const stmt = db.prepare('UPDATE campaigns SET target_countries = ? WHERE google_campaign_id = ?')
+  const tx = db.transaction(() => {
+    for (const [campId, countries] of Object.entries(campTargets)) {
+      stmt.run(countries.sort().join(', '), campId)
+    }
+  })
+  tx()
+
+  log('info', 'google-ads', `Geo targeting gesynchroniseerd voor ${Object.keys(campTargets).length} campagnes`)
 }
 
 export async function syncDailyMetrics(dateRange: string = 'LAST_30_DAYS') {

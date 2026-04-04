@@ -34,6 +34,7 @@ function initSchema(db: Database.Database) {
       type TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'ENABLED',
       country TEXT,
+      target_countries TEXT,
       daily_budget REAL,
       bid_strategy TEXT,
       target_roas REAL,
@@ -212,4 +213,10 @@ function initSchema(db: Database.Database) {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `)
+
+  // Migrations for existing databases
+  const cols = db.prepare("PRAGMA table_info(campaigns)").all() as Array<{ name: string }>
+  if (!cols.some(c => c.name === 'target_countries')) {
+    db.exec('ALTER TABLE campaigns ADD COLUMN target_countries TEXT')
+  }
 }

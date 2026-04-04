@@ -13,6 +13,7 @@ interface Campaign {
   type: string
   status: string
   country: string
+  target_countries: string | null
   daily_budget: number
   total_cost: number
   total_clicks: number
@@ -200,7 +201,7 @@ export default function CampaignsPage() {
                 <tr className="border-b border-border-subtle">
                   <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2.5">Naam</th>
                   <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2.5">Type</th>
-                  <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2.5">Land</th>
+                  <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2.5">Target</th>
                   <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">Budget/dag</th>
                   <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">Kosten ({period}d)</th>
                   <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">ROAS</th>
@@ -229,7 +230,9 @@ export default function CampaignsPage() {
                         {c.type}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 text-[13px]">{c.country ? countryFlag(c.country) : '—'}</td>
+                    <td className="px-4 py-2.5 text-[11px] text-text-secondary">
+                      {c.target_countries || (c.country ? countryFlag(c.country) : '—')}
+                    </td>
                     <td className="px-4 py-2.5 text-[13px] text-right text-text-secondary">{c.daily_budget ? formatCurrency(c.daily_budget) : '—'}</td>
                     <td className="px-4 py-2.5 text-[13px] text-right font-medium text-text-primary">{formatCurrency(c.total_cost || 0)}</td>
                     <td className={`px-4 py-2.5 text-[13px] text-right font-semibold ${(c.roas || 0) >= 3 ? 'text-success' : (c.roas || 0) >= 1 ? 'text-warning' : 'text-danger'}`}>
