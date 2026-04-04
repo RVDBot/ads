@@ -295,6 +295,38 @@ export default function SettingsPage() {
         </div>
 
         <div className="space-y-3">
+          {/* Token Usage — always open at top */}
+          {tokenUsage && (
+            <div className="bg-surface-1 rounded-2xl border border-border-subtle px-5 py-4">
+              <div className="text-[14px] font-semibold text-text-primary mb-3">Token Gebruik</div>
+              <div className="grid grid-cols-3 gap-3">
+                {(
+                  [
+                    ['Totaal', tokenUsage.total],
+                    ['Laatste 7 dagen', tokenUsage.last7d],
+                    ['Laatste 30 dagen', tokenUsage.last30d],
+                  ] as [string, { input: number; output: number }][]
+                ).map(([label, data]) => (
+                  <div
+                    key={label}
+                    className="bg-surface-0 rounded-xl p-3 border border-border-subtle"
+                  >
+                    <div className="text-text-tertiary text-[11px] font-medium mb-2">
+                      {label}
+                    </div>
+                    <div className="text-text-primary text-[14px] font-semibold">
+                      {formatTokens(data.input + data.output)}
+                    </div>
+                    <div className="text-text-tertiary text-[11px] mt-0.5">
+                      In: {formatTokens(data.input)} / Out:{' '}
+                      {formatTokens(data.output)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Google Ads */}
           <Section title="Google Ads" ok={hasGoogleAds}>
             <div className="space-y-3">
@@ -492,37 +524,6 @@ export default function SettingsPage() {
               </FieldRow>
               <SaveButton onClick={safety.saveAll} saving={safety.saving} saved={safety.saved} />
             </div>
-          </Section>
-
-          {/* Token Usage */}
-          <Section title="Token Gebruik">
-            {tokenUsage && (
-              <div className="grid grid-cols-3 gap-3">
-                {(
-                  [
-                    ['Totaal', tokenUsage.total],
-                    ['Laatste 7 dagen', tokenUsage.last7d],
-                    ['Laatste 30 dagen', tokenUsage.last30d],
-                  ] as [string, { input: number; output: number }][]
-                ).map(([label, data]) => (
-                  <div
-                    key={label}
-                    className="bg-surface-0 rounded-xl p-3 border border-border-subtle"
-                  >
-                    <div className="text-text-tertiary text-[11px] font-medium mb-2">
-                      {label}
-                    </div>
-                    <div className="text-text-primary text-[14px] font-semibold">
-                      {formatTokens(data.input + data.output)}
-                    </div>
-                    <div className="text-text-tertiary text-[11px] mt-0.5">
-                      In: {formatTokens(data.input)} / Out:{' '}
-                      {formatTokens(data.output)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </Section>
 
           {/* Log Viewer */}
