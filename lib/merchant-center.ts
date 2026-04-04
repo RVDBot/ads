@@ -14,6 +14,18 @@ function getAuthClient() {
 
 const DOMAINS = ['com', 'nl', 'de', 'fr', 'es', 'it'] as const
 
+// Derive country from product URL: speedropeshop.nl → nl, speedropeshop.fr → fr
+function countryFromUrl(link: string | null | undefined): string | null {
+  if (!link) return null
+  try {
+    const hostname = new URL(link).hostname // e.g. "www.speedropeshop.nl"
+    const tld = hostname.split('.').pop()?.toLowerCase()
+    if (tld && ['nl', 'de', 'fr', 'es', 'it'].includes(tld)) return tld
+    if (tld === 'com') return 'com'
+  } catch { /* invalid url */ }
+  return null
+}
+
 async function syncMerchantForDomain(domain: string, merchantId: string) {
   const auth = getAuthClient()
   const content = google.content({ version: 'v2.1', auth })
@@ -40,7 +52,7 @@ async function syncMerchantForDomain(domain: string, merchantId: string) {
         if (!p.id || !p.title) continue
         const price = p.price ? parseFloat(p.price.value || '0') : null
         const margin = p.customLabel1 || null
-        const country = p.targetCountry || domain
+        const country = countryFromUrl(p.link) || domain
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const status = (p as any).destinations?.[0]?.status || 'approved'
         stmt.run(p.id, p.title, price, p.price?.currency || 'EUR', p.availability, margin, country, status)
