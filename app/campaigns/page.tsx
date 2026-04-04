@@ -117,9 +117,20 @@ export default function CampaignsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
+  const [sortKey, setSortKey] = useState<string>('total_cost')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [detail, setDetail] = useState<CampaignDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+
+  function handleSort(key: string) {
+    if (sortKey === key) {
+      setSortDir(sortDir === 'desc' ? 'asc' : 'desc')
+    } else {
+      setSortKey(key)
+      setSortDir('desc')
+    }
+  }
 
   useEffect(() => {
     setLoading(true)
@@ -140,11 +151,18 @@ export default function CampaignsPage() {
       .catch(() => setDetailLoading(false))
   }, [selectedId])
 
-  const filtered = campaigns.filter(c => {
-    if (typeFilter && c.type !== typeFilter) return false
-    if (statusFilter && c.status !== statusFilter) return false
-    return true
-  })
+  const filtered = campaigns
+    .filter(c => {
+      if (typeFilter && c.type !== typeFilter) return false
+      if (statusFilter && c.status !== statusFilter) return false
+      return true
+    })
+    .sort((a, b) => {
+      const aVal = (a as any)[sortKey] ?? ''
+      const bVal = (b as any)[sortKey] ?? ''
+      const cmp = typeof aVal === 'string' ? aVal.localeCompare(bVal) : (aVal as number) - (bVal as number)
+      return sortDir === 'desc' ? -cmp : cmp
+    })
 
   return (
     <>
@@ -199,14 +217,25 @@ export default function CampaignsPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border-subtle">
-                  <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2.5">Naam</th>
-                  <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2.5">Type</th>
-                  <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2.5">Target</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">Budget/dag</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">Kosten ({period}d)</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">ROAS</th>
-                  <th className="text-center text-[11px] font-medium text-text-tertiary px-4 py-2.5">ROAS 30d</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2.5">Conversies</th>
+                  {([
+                    { key: 'name', label: 'Naam', align: 'left' },
+                    { key: 'type', label: 'Type', align: 'left' },
+                    { key: 'target_countries', label: 'Target', align: 'left' },
+                    { key: 'daily_budget', label: 'Budget/dag', align: 'right' },
+                    { key: 'total_cost', label: `Kosten (${period}d)`, align: 'right' },
+                    { key: 'roas', label: 'ROAS', align: 'right' },
+                    { key: '', label: 'ROAS 30d', align: 'center' },
+                    { key: 'total_conversions', label: 'Conversies', align: 'right' },
+                  ] as const).map(col => (
+                    <th key={col.label}
+                      onClick={() => col.key && handleSort(col.key)}
+                      className={`text-${col.align} text-[11px] font-medium text-text-tertiary px-4 py-2.5 ${col.key ? 'cursor-pointer hover:text-text-secondary select-none' : ''}`}>
+                      {col.label}
+                      {col.key && sortKey === col.key && (
+                        <span className="ml-0.5">{sortDir === 'desc' ? ' ↓' : ' ↑'}</span>
+                      )}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
