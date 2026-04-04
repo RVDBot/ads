@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   // Campaigns with metrics
   const campaignParams: unknown[] = [startStr]
   let campaignWhere = 'dm.date >= ?'
-  if (country) { campaignWhere += ' AND c.country = ?'; campaignParams.push(country) }
+  if (country) { campaignWhere += ' AND LOWER(c.country) = LOWER(?)'; campaignParams.push(country) }
 
   const campaigns = db.prepare(`
     SELECT c.*,
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
   // KPI totals current period
   const kpiParams: unknown[] = [startStr]
   let kpiWhere = 'dm.date >= ?'
-  if (country) { kpiWhere += ' AND c.country = ?'; kpiParams.push(country) }
+  if (country) { kpiWhere += ' AND LOWER(c.country) = LOWER(?)'; kpiParams.push(country) }
 
   const kpi = db.prepare(`
     SELECT SUM(dm.cost) as spend, SUM(dm.conversion_value) as revenue,
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
   // Previous period KPIs
   const prevParams: unknown[] = [prevStartStr, startStr]
   let prevWhere = 'dm.date >= ? AND dm.date < ?'
-  if (country) { prevWhere += ' AND c.country = ?'; prevParams.push(country) }
+  if (country) { prevWhere += ' AND LOWER(c.country) = LOWER(?)'; prevParams.push(country) }
 
   const prevKpi = db.prepare(`
     SELECT SUM(dm.cost) as spend, SUM(dm.conversion_value) as revenue,
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
   // Daily ROAS for chart
   const dailyParams: unknown[] = [startStr]
   let dailyWhere = 'dm.date >= ?'
-  if (country) { dailyWhere += ' AND c.country = ?'; dailyParams.push(country) }
+  if (country) { dailyWhere += ' AND LOWER(c.country) = LOWER(?)'; dailyParams.push(country) }
 
   const dailyRoas = db.prepare(`
     SELECT dm.date, SUM(dm.cost) as cost, SUM(dm.conversion_value) as value,

@@ -19,6 +19,47 @@ function getClient() {
 
 export { getClient as getGoogleAdsClient }
 
+// Google Ads API returns numeric enums for campaign type
+const CAMPAIGN_TYPE_MAP: Record<string, string> = {
+  '0': 'UNKNOWN', '1': 'UNKNOWN', '2': 'SEARCH', '3': 'DISPLAY',
+  '4': 'SHOPPING', '5': 'HOTEL', '6': 'VIDEO', '7': 'MULTI_CHANNEL',
+  '8': 'LOCAL', '9': 'SMART', '10': 'PERFORMANCE_MAX', '11': 'LOCAL_SERVICES',
+  '12': 'DISCOVERY', '13': 'TRAVEL',
+  // Also accept string values as-is
+  SEARCH: 'SEARCH', DISPLAY: 'DISPLAY', SHOPPING: 'SHOPPING',
+  VIDEO: 'VIDEO', PERFORMANCE_MAX: 'PERFORMANCE_MAX', SMART: 'SMART',
+  DISCOVERY: 'DISCOVERY', LOCAL: 'LOCAL', HOTEL: 'HOTEL',
+  LOCAL_SERVICES: 'LOCAL_SERVICES', TRAVEL: 'TRAVEL',
+}
+
+const CAMPAIGN_STATUS_MAP: Record<string, string> = {
+  '0': 'UNKNOWN', '1': 'UNKNOWN', '2': 'ENABLED', '3': 'PAUSED', '4': 'REMOVED',
+  ENABLED: 'ENABLED', PAUSED: 'PAUSED', REMOVED: 'REMOVED', UNKNOWN: 'UNKNOWN',
+}
+
+// Try to derive country from campaign name (e.g., "NL - Search" or "Shopping FR")
+function deriveCountry(name: string): string | null {
+  const countryCodes = ['nl', 'de', 'fr', 'es', 'it']
+  const nameLower = name.toLowerCase()
+  for (const code of countryCodes) {
+    // Match country code as whole word (surrounded by non-alpha or at start/end)
+    const regex = new RegExp(`(?:^|[^a-z])${code}(?:[^a-z]|$)`)
+    if (regex.test(nameLower)) return code
+  }
+  // Check full country names
+  const nameMap: Record<string, string> = {
+    'nederland': 'nl', 'dutch': 'nl', 'netherlands': 'nl',
+    'duitsland': 'de', 'germany': 'de', 'deutschland': 'de', 'german': 'de',
+    'frankrijk': 'fr', 'france': 'fr', 'french': 'fr',
+    'spanje': 'es', 'spain': 'es', 'spanish': 'es', 'españa': 'es',
+    'italie': 'it', 'italy': 'it', 'italian': 'it', 'italia': 'it',
+  }
+  for (const [keyword, code] of Object.entries(nameMap)) {
+    if (nameLower.includes(keyword)) return code
+  }
+  return null
+}
+
 export async function syncCampaigns() {
   const customer = getClient()
   const db = getDb()
@@ -37,10 +78,11 @@ export async function syncCampaigns() {
   `)
 
   const stmt = db.prepare(`
-    INSERT INTO campaigns (google_campaign_id, name, type, status, daily_budget, bid_strategy, target_roas, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    INSERT INTO campaigns (google_campaign_id, name, type, status, country, daily_budget, bid_strategy, target_roas, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(google_campaign_id) DO UPDATE SET
       name = excluded.name, type = excluded.type, status = excluded.status,
+      country = COALESCE(excluded.country, campaigns.country),
       daily_budget = excluded.daily_budget, bid_strategy = excluded.bid_strategy,
       target_roas = excluded.target_roas, updated_at = CURRENT_TIMESTAMP
   `)
@@ -50,10 +92,16 @@ export async function syncCampaigns() {
       const c = row.campaign
       if (!c) continue
       const budget = row.campaign_budget?.amount_micros ? Number(row.campaign_budget.amount_micros) / 1_000_000 : null
+      const rawType = String(c.advertising_channel_type || 'UNKNOWN')
+      const mappedType = CAMPAIGN_TYPE_MAP[rawType] || rawType
+      const rawStatus = String(c.status || 'ENABLED')
+      const mappedStatus = CAMPAIGN_STATUS_MAP[rawStatus] || rawStatus
+      const country = deriveCountry(c.name || '')
       stmt.run(
         String(c.id), c.name,
-        String(c.advertising_channel_type || 'UNKNOWN'),
-        String(c.status || 'ENABLED'),
+        mappedType,
+        mappedStatus,
+        country,
         budget,
         String(c.bidding_strategy_type || ''),
         c.target_roas?.target_roas || null
@@ -142,7 +190,8 @@ export async function syncAdGroups() {
     for (const row of rows) {
       const camp = findCampaign.get(String(row.campaign?.id)) as { id: number } | undefined
       if (!camp) { skipped++; continue }
-      stmt.run(String(row.ad_group?.id), camp.id, row.ad_group?.name, String(row.ad_group?.status || 'ENABLED'))
+      const agStatus = CAMPAIGN_STATUS_MAP[String(row.ad_group?.status || 'ENABLED')] || String(row.ad_group?.status || 'ENABLED')
+      stmt.run(String(row.ad_group?.id), camp.id, row.ad_group?.name, agStatus)
     }
   })
   tx()

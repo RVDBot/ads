@@ -39,7 +39,7 @@ async function syncMerchantForDomain(domain: string, merchantId: string) {
       for (const p of items) {
         if (!p.id || !p.title) continue
         const price = p.price ? parseFloat(p.price.value || '0') : null
-        const margin = p.customLabel0 || null
+        const margin = p.customLabel1 || null
         const country = p.targetCountry || domain
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const status = (p as any).destinations?.[0]?.status || 'approved'
