@@ -18,8 +18,8 @@ export async function GET(req: NextRequest) {
 
   // Campaigns with metrics
   const campaignParams: unknown[] = [startStr]
-  let campaignWhere = 'dm.date >= ?'
-  if (country) { campaignWhere += ' AND LOWER(c.country) = LOWER(?)'; campaignParams.push(country) }
+  let countryFilter = ''
+  if (country) { countryFilter = ' AND LOWER(c.country) = LOWER(?)'; campaignParams.push(country) }
 
   const campaigns = db.prepare(`
     SELECT c.*,
@@ -28,7 +28,8 @@ export async function GET(req: NextRequest) {
       SUM(dm.conversion_value) as total_value,
       CASE WHEN SUM(dm.cost) > 0 THEN SUM(dm.conversion_value) / SUM(dm.cost) ELSE 0 END as roas
     FROM campaigns c
-    LEFT JOIN daily_metrics dm ON dm.campaign_id = c.id AND ${campaignWhere}
+    LEFT JOIN daily_metrics dm ON dm.campaign_id = c.id AND dm.date >= ?
+    WHERE 1=1 ${countryFilter}
     GROUP BY c.id
     ORDER BY total_cost DESC
   `).all(...campaignParams)
