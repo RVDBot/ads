@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { apiFetch } from '@/lib/api'
 
 interface ProposedAction {
@@ -35,6 +35,44 @@ const statusBadges: Record<string, { label: string; className: string }> = {
   dismissed: { label: 'Genegeerd', className: 'bg-surface-2 text-text-tertiary' },
 }
 
+function formatInline(text: string) {
+  // Strip markdown headers (# ## ### etc) — keep the text
+  let cleaned = text.replace(/^#{1,4}\s+/gm, '')
+  // Strip horizontal rules
+  cleaned = cleaned.replace(/^---+$/gm, '')
+
+  const parts: (string | { type: string; content: string; href?: string })[] = []
+  // Match: [link](url), **bold**, *italic*, _italic_
+  const regex = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)|\*\*(.+?)\*\*|\*(.+?)\*|_(.+?)_/g
+  let last = 0
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(cleaned)) !== null) {
+    if (match.index > last) parts.push(cleaned.slice(last, match.index))
+    if (match[1] && match[2]) parts.push({ type: 'link', content: match[1], href: match[2] })
+    else if (match[3]) parts.push({ type: 'bold', content: match[3] })
+    else if (match[4]) parts.push({ type: 'italic', content: match[4] })
+    else if (match[5]) parts.push({ type: 'italic', content: match[5] })
+    last = match.index + match[0].length
+  }
+  if (last < cleaned.length) parts.push(cleaned.slice(last))
+  return parts
+}
+
+function FormattedText({ text }: { text: string }) {
+  const parts = useMemo(() => formatInline(text), [text])
+  return (
+    <>
+      {parts.map((p, i) => {
+        if (typeof p === 'string') return <span key={i}>{p}</span>
+        if (p.type === 'bold') return <strong key={i} className="font-semibold">{p.content}</strong>
+        if (p.type === 'italic') return <em key={i}>{p.content}</em>
+        if (p.type === 'link') return <a key={i} href={p.href} target="_blank" rel="noopener noreferrer" className="text-accent underline">{p.content}</a>
+        return <span key={i}>{p.content}</span>
+      })}
+    </>
+  )
+}
+
 export default function ChatMessage({ id, role, content, proposedActions, onActionApplied }: ChatMessageProps) {
   if (role === 'user') {
     return (
@@ -50,7 +88,7 @@ export default function ChatMessage({ id, role, content, proposedActions, onActi
     <div className="flex justify-start">
       <div className="max-w-[85%] flex flex-col gap-2">
         <div className="bg-surface-1 border border-border-subtle text-[13px] text-text-primary px-4 py-2.5 rounded-2xl rounded-bl-md whitespace-pre-wrap">
-          {content}
+          <FormattedText text={content} />
         </div>
         {proposedActions && proposedActions.length > 0 && (
           <div className="flex flex-col gap-2">

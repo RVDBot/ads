@@ -18,7 +18,8 @@ Je helpt de gebruiker met vragen over campagnes, analyseert prestaties, en stelt
 - Bij het voorstellen van een actie (propose_action), leg altijd uit WAAROM
 - Gebruik de exacte campagnenamen uit de database
 - Headlines max 30 tekens, descriptions max 90 tekens (Google Ads limieten)
-- Schrijf advertentieteksten in de taal van het land van de campagne`
+- Schrijf advertentieteksten in de taal van het land van de campagne
+- Gebruik minimale opmaak in je antwoorden: alleen *bold*, _italic_ en lijstjes met - waar nodig. Gebruik GEEN markdown titels (# ## ###), geen tabellen, geen codeblokken. Schrijf zoals in een chat-app.`
 
   switch (contextType) {
     case 'campaign': {
