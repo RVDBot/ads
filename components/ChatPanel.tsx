@@ -56,14 +56,15 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
         if (contextId != null) params.set('context_id', String(contextId))
         const res = await apiFetch(`/api/chat/threads?${params}`)
         if (!res.ok) return
-        const threads = await res.json()
+        const threadsData = await res.json()
+        const threads = threadsData.threads || []
         if (threads.length === 0) return
         const latest = threads[0]
         setThreadId(latest.id)
         const msgRes = await apiFetch(`/api/chat/threads/${latest.id}`)
         if (!msgRes.ok) return
-        const data = await msgRes.json()
-        setMessages(data.messages || [])
+        const msgData = await msgRes.json()
+        setMessages(msgData.messages || [])
       } catch {
         // ignore load errors
       }
