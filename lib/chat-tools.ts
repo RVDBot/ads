@@ -49,11 +49,12 @@ export const CHAT_TOOLS = [
   },
   {
     name: 'get_products',
-    description: 'Haal producten op uit Merchant Center, optioneel gefilterd op land.',
+    description: 'Haal producten op uit Merchant Center, optioneel gefilterd op land en/of zoekterm. Geeft alle statussen terug (approved, disapproved, pending).',
     input_schema: {
       type: 'object' as const,
       properties: {
         country: { type: 'string', description: 'Landcode (nl, de, fr, es, it, com). Leeg = alle landen.' },
+        search: { type: 'string', description: 'Zoek op producttitel (bevat). Gebruik dit om specifieke producten te vinden.' },
       },
       required: [],
     },
@@ -154,13 +155,21 @@ export function executeTool(name: string, input: Record<string, unknown>): { res
 
     case 'get_products': {
       const country = input.country as string | undefined
-      let products
+      const search = input.search as string | undefined
+      const conditions: string[] = []
+      const params: (string | number)[] = []
       if (country) {
-        products = db.prepare('SELECT title, price, currency, availability, margin_label, country FROM products WHERE LOWER(country) = LOWER(?) AND status = ? LIMIT 50').all(country, 'approved')
-      } else {
-        products = db.prepare('SELECT title, price, currency, availability, margin_label, country FROM products WHERE status = ? LIMIT 50').all('approved')
+        conditions.push('LOWER(country) = LOWER(?)')
+        params.push(country)
       }
-      return { result: JSON.stringify(products) }
+      if (search) {
+        conditions.push('LOWER(title) LIKE LOWER(?)')
+        params.push(`%${search}%`)
+      }
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+      const products = db.prepare(`SELECT title, price, currency, availability, status, margin_label, country FROM products ${where} ORDER BY title LIMIT 200`).all(...params)
+      const total = db.prepare(`SELECT COUNT(*) as count FROM products ${where}`).get(...params) as { count: number }
+      return { result: JSON.stringify({ products, total: total.count }) }
     }
 
     case 'get_suggestions': {
