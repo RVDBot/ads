@@ -174,16 +174,19 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
 
   function processSSE(event: string, data: string, assistantIndex: number) {
     switch (event) {
-      case 'text_delta':
+      case 'text_delta': {
+        let text = data
+        try { text = JSON.parse(data).text ?? data } catch { /* raw string fallback */ }
         setMessages(prev => {
           const updated = [...prev]
           updated[assistantIndex] = {
             ...updated[assistantIndex],
-            content: updated[assistantIndex].content + data,
+            content: updated[assistantIndex].content + text,
           }
           return updated
         })
         break
+      }
       case 'tool_start':
         try {
           const parsed = JSON.parse(data)
