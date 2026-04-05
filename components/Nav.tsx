@@ -3,6 +3,7 @@ import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { apiFetch } from '@/lib/api'
+import { useChatPanel } from './ChatProvider'
 
 const tabs = [
   { label: 'Dashboard', href: '/' },
@@ -26,6 +27,7 @@ function timeAgo(iso: string): string {
 
 export default function Nav() {
   const pathname = usePathname()
+  const { openChat } = useChatPanel()
   const [syncing, setSyncing] = useState(false)
   const [lastSync, setLastSync] = useState<string | null>(null)
 
@@ -87,6 +89,13 @@ export default function Nav() {
           <button onClick={handleSync} disabled={syncing}
             className="text-[12px] font-medium px-3.5 py-1.5 rounded-lg bg-accent text-white hover:bg-accent-hover disabled:opacity-50 transition-colors">
             {syncing ? 'Syncing...' : 'Sync nu'}
+          </button>
+          <button onClick={() => openChat('global', null, 'AI Assistent')}
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-2 text-text-tertiary transition-colors"
+            title="AI Chat">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            </svg>
           </button>
           <Link href="/settings" className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-2 text-text-tertiary transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>

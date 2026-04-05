@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { apiFetch } from '@/lib/api'
+import { useChatPanel } from './ChatProvider'
 
 interface SuggestionCardProps {
   id: number
@@ -37,6 +38,7 @@ const typeBadges: Record<string, string> = {
 
 export default function SuggestionCard({ id, title, description, priority, type, status, details, campaignName, appliedAt, roasBefore, roasAfter, onUpdate }: SuggestionCardProps) {
   const [loading, setLoading] = useState('')
+  const { openChat } = useChatPanel()
   const badge = priorityBadges[priority] || priorityBadges.medium
   const [expanded, setExpanded] = useState(false)
 
@@ -101,6 +103,13 @@ export default function SuggestionCard({ id, title, description, priority, type,
             <span className="inline-block mt-2 text-[11px] font-medium text-text-tertiary bg-surface-2 px-2 py-0.5 rounded-md">Genegeerd</span>
           )}
 
+          {status !== 'pending' && (
+            <button onClick={() => openChat('suggestion', id, title)}
+              className="text-[11px] text-accent hover:underline mt-2">
+              Bespreek met AI
+            </button>
+          )}
+
           {Object.keys(parsedDetails).length > 0 && (
             <button onClick={() => setExpanded(!expanded)} className="text-[11px] text-accent mt-2 hover:underline">
               {expanded ? 'Verberg details' : 'Bekijk details'}
@@ -119,6 +128,10 @@ export default function SuggestionCard({ id, title, description, priority, type,
             <button onClick={handleApply} disabled={!!loading}
               className="px-3.5 py-1.5 bg-accent text-white text-[12px] font-semibold rounded-lg hover:bg-accent-hover disabled:opacity-50">
               {loading === 'apply' ? '...' : 'Pas toe'}
+            </button>
+            <button onClick={() => openChat('suggestion', id, title)}
+              className="px-3 py-1.5 text-accent text-[12px] font-medium rounded-lg hover:bg-accent-subtle disabled:opacity-50">
+              Bespreek
             </button>
             <button onClick={handleDismiss} disabled={!!loading}
               className="px-3 py-1.5 text-text-tertiary text-[12px] font-medium rounded-lg hover:bg-surface-2 disabled:opacity-50">

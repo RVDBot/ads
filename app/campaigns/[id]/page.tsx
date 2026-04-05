@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Nav from '@/components/Nav'
 import { apiFetch } from '@/lib/api'
 import { formatCurrency, formatRoas, countryFlag } from '@/lib/utils'
+import { useChatPanel } from '@/components/ChatProvider'
 
 interface Campaign {
   id: number
@@ -163,6 +164,7 @@ function MetricsChart({ data }: { data: DailyMetric[] }) {
 export default function CampaignDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const { openChat } = useChatPanel()
   const id = params.id as string
 
   const [campaign, setCampaign] = useState<Campaign | null>(null)
@@ -244,6 +246,10 @@ export default function CampaignDetailPage() {
             {campaign.target_countries && (
               <span className="text-[11px] text-text-secondary">{campaign.target_countries}</span>
             )}
+            <button onClick={() => openChat('campaign', campaign.id, campaign.name)}
+              className="px-3 py-1.5 bg-accent/10 text-accent text-[12px] font-semibold rounded-lg hover:bg-accent/20 transition-colors shrink-0">
+              Vraag AI
+            </button>
           </div>
         </div>
 

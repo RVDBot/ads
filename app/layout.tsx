@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import ChatProvider from '@/components/ChatProvider'
 
 export const metadata: Metadata = {
   title: 'Ads Optimizer — SpeedRopeShop',
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="nl">
-      <body>{children}</body>
+      <body><ChatProvider>{children}</ChatProvider></body>
     </html>
   )
 }
