@@ -213,6 +213,26 @@ function initSchema(db: Database.Database) {
       meta TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS chat_threads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      context_type TEXT NOT NULL,
+      context_id INTEGER,
+      title TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      thread_id INTEGER NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT,
+      tool_calls TEXT,
+      proposed_actions TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
+    );
   `)
 
   // Migrations for existing databases
