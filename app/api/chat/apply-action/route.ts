@@ -120,6 +120,49 @@ async function verifyAction(actionType: string, details: Record<string, unknown>
         return { verified: rows.length > 0, actual: rows.length > 0 ? 'gevonden' : 'niet gevonden', expected: details.keyword }
       }
 
+      case 'keyword_add': {
+        if (!details.google_adgroup_id) return { verified: false }
+        const keywords = Array.isArray(details.keywords) ? details.keywords as string[] : [details.keyword as string]
+        const kw = keywords[0]
+        if (!kw) return { verified: false }
+        const rows = await customer.query(`
+          SELECT ad_group_criterion.keyword.text
+          FROM ad_group_criterion
+          WHERE ad_group.id = ${details.google_adgroup_id}
+            AND ad_group_criterion.keyword.text = '${kw.replace(/'/g, "\\'")}'
+          LIMIT 1
+        `)
+        return { verified: rows.length > 0, actual: rows.length > 0 ? 'gevonden' : 'niet gevonden', expected: kw }
+      }
+
+      case 'bid_adjustment': {
+        if (!details.google_adgroup_id || !details.criterion_id) return { verified: true }
+        const [row] = await customer.query(`
+          SELECT ad_group_criterion.cpc_bid_micros
+          FROM ad_group_criterion
+          WHERE ad_group.id = ${details.google_adgroup_id}
+            AND ad_group_criterion.criterion_id = ${details.criterion_id}
+          LIMIT 1
+        `)
+        const actualBid = row?.ad_group_criterion?.cpc_bid_micros
+          ? Number(row.ad_group_criterion.cpc_bid_micros) / 1_000_000
+          : null
+        const expected = Number(details.new_bid || 0)
+        return { verified: actualBid !== null && Math.abs(actualBid - expected) < 0.01, actual: actualBid, expected }
+      }
+
+      case 'new_campaign': {
+        const campName = details.campaign_name as string | undefined
+        if (!campName) return { verified: true }
+        const rows = await customer.query(`
+          SELECT campaign.name
+          FROM campaign
+          WHERE campaign.name = '${campName.replace(/'/g, "\\'")}'
+          LIMIT 1
+        `)
+        return { verified: rows.length > 0, actual: rows.length > 0 ? 'gevonden' : 'niet gevonden', expected: campName }
+      }
+
       default:
         // For types we can't easily verify, assume success if API didn't throw
         return { verified: true }
