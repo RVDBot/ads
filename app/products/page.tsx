@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Nav from '@/components/Nav'
 import CountryFilter from '@/components/CountryFilter'
-import { apiFetch } from '@/lib/api'
+import { apiFetch, useSyncRefresh } from '@/lib/api'
 import { formatCurrency, countryFlag } from '@/lib/utils'
 
 interface Product {
@@ -36,6 +36,7 @@ export default function ProductsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
+  const syncRev = useSyncRefresh()
 
   useEffect(() => {
     setLoading(true)
@@ -47,7 +48,7 @@ export default function ProductsPage() {
       .then(r => r.json())
       .then(d => { setProducts(d.products || []); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [country, marginFilter, statusFilter])
+  }, [country, marginFilter, statusFilter, syncRev])
 
   return (
     <>

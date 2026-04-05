@@ -8,7 +8,7 @@ import PeriodFilter from '@/components/PeriodFilter'
 import RoasChart from '@/components/RoasChart'
 import CountryBreakdown from '@/components/CountryBreakdown'
 import InsightCard from '@/components/InsightCard'
-import { apiFetch } from '@/lib/api'
+import { apiFetch, useSyncRefresh } from '@/lib/api'
 import { formatCurrency, formatRoas } from '@/lib/utils'
 
 export default function Dashboard() {
@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [data, setData] = useState<any>(null)
   const [insights, setInsights] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const syncRev = useSyncRefresh()
 
   useEffect(() => {
     setLoading(true)
@@ -31,7 +32,7 @@ export default function Dashboard() {
       .then(r => r.ok ? r.json() : { suggestions: [] })
       .then(d => setInsights(d.suggestions || []))
       .catch(() => setInsights([]))
-  }, [country, period])
+  }, [country, period, syncRev])
 
   const kpi = data?.kpi
   const prevKpi = data?.prevKpi

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Nav from '@/components/Nav'
 import CountryFilter from '@/components/CountryFilter'
 import PeriodFilter from '@/components/PeriodFilter'
-import { apiFetch } from '@/lib/api'
+import { apiFetch, useSyncRefresh } from '@/lib/api'
 import { formatCurrency, formatRoas, countryFlag } from '@/lib/utils'
 
 interface Campaign {
@@ -102,6 +102,7 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true)
   const [sortKey, setSortKey] = useState<string>('status')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const syncRev = useSyncRefresh()
 
   function handleSort(key: string) {
     if (sortKey === key) {
@@ -120,7 +121,7 @@ export default function CampaignsPage() {
       .then(r => r.json())
       .then(d => { setCampaigns(d.campaigns || []); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [country, period])
+  }, [country, period, syncRev])
 
   const filtered = campaigns
     .filter(c => {

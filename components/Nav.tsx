@@ -53,6 +53,7 @@ export default function Nav() {
       const r = await apiFetch('/api/sync')
       const d = await r.json()
       if (d.lastSyncAt) setLastSync(d.lastSyncAt)
+      window.dispatchEvent(new Event('sync-complete'))
     } finally {
       setSyncing(false)
     }

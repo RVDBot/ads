@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Nav from '@/components/Nav'
 import CountryFilter from '@/components/CountryFilter'
 import PeriodFilter from '@/components/PeriodFilter'
-import { apiFetch } from '@/lib/api'
+import { apiFetch, useSyncRefresh } from '@/lib/api'
 import { formatCurrency, formatRoas, countryFlag } from '@/lib/utils'
 
 interface Keyword {
@@ -62,6 +62,7 @@ export default function KeywordsPage() {
   const [kwDir, setKwDir] = useState<'asc' | 'desc'>('desc')
   const [stSort, setStSort] = useState<string>('cost')
   const [stDir, setStDir] = useState<'asc' | 'desc'>('desc')
+  const syncRev = useSyncRefresh()
 
   function handleKwSort(key: string) {
     if (kwSort === key) { setKwDir(kwDir === 'desc' ? 'asc' : 'desc') }
@@ -85,7 +86,7 @@ export default function KeywordsPage() {
         setLoading(false)
       })
       .catch(() => setLoading(false))
-  }, [country, period])
+  }, [country, period, syncRev])
 
   function sortList<T>(list: T[], key: string, dir: 'asc' | 'desc'): T[] {
     return [...list].sort((a, b) => {

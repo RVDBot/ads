@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Nav from '@/components/Nav'
 import SuggestionCard from '@/components/SuggestionCard'
-import { apiFetch } from '@/lib/api'
+import { apiFetch, useSyncRefresh } from '@/lib/api'
 
 interface Suggestion {
   id: number
@@ -43,6 +43,8 @@ export default function InsightsPage() {
   const [typeFilter, setTypeFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
 
+  const syncRev = useSyncRefresh()
+
   const fetchSuggestions = useCallback(async () => {
     setLoading(true)
     try {
@@ -62,7 +64,7 @@ export default function InsightsPage() {
     } finally {
       setLoading(false)
     }
-  }, [priorityFilter, typeFilter, statusFilter])
+  }, [priorityFilter, typeFilter, statusFilter, syncRev])
 
   useEffect(() => { fetchSuggestions() }, [fetchSuggestions])
 
