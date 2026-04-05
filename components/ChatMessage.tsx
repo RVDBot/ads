@@ -8,6 +8,7 @@ interface ProposedAction {
   title: string
   details: Record<string, unknown>
   status: string
+  verification_note?: string
 }
 
 interface ChatMessageProps {
@@ -30,8 +31,8 @@ const typeLabels: Record<string, string> = {
 }
 
 const statusBadges: Record<string, { label: string; className: string }> = {
-  applied: { label: 'Toegepast', className: 'bg-success-subtle text-success' },
-  failed: { label: 'Mislukt', className: 'bg-danger-subtle text-danger' },
+  applied: { label: 'Toegepast ✓', className: 'bg-success-subtle text-success' },
+  failed: { label: 'Verificatie mislukt', className: 'bg-danger-subtle text-danger' },
   dismissed: { label: 'Genegeerd', className: 'bg-surface-2 text-text-tertiary' },
 }
 
@@ -170,6 +171,9 @@ function ActionCard({ action, messageId, actionIndex, onActionApplied }: {
             </div>
           ))}
         </div>
+      )}
+      {action.verification_note && (
+        <div className="text-[11px] text-danger mt-1">{action.verification_note}</div>
       )}
       {action.status === 'pending' && (
         <div className="flex gap-2 mt-2">

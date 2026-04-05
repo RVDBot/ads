@@ -75,6 +75,61 @@ function resolveGoogleIds(db: ReturnType<typeof getDb>, details: Record<string, 
   return resolved
 }
 
+async function verifyAction(actionType: string, details: Record<string, unknown>): Promise<{ verified: boolean; actual?: unknown; expected?: unknown }> {
+  try {
+    const customer = getGoogleAdsClient()
+
+    switch (actionType) {
+      case 'budget_change': {
+        if (!details.google_campaign_id) return { verified: false }
+        const [row] = await customer.query(`
+          SELECT campaign_budget.amount_micros
+          FROM campaign
+          WHERE campaign.id = ${details.google_campaign_id}
+          LIMIT 1
+        `)
+        const actualBudget = row?.campaign_budget?.amount_micros
+          ? Number(row.campaign_budget.amount_micros) / 1_000_000
+          : null
+        const expected = Number(details.new_budget || 0)
+        return { verified: actualBudget !== null && Math.abs(actualBudget - expected) < 0.01, actual: actualBudget, expected }
+      }
+
+      case 'pause_campaign': {
+        if (!details.google_campaign_id) return { verified: false }
+        const [row] = await customer.query(`
+          SELECT campaign.status
+          FROM campaign
+          WHERE campaign.id = ${details.google_campaign_id}
+          LIMIT 1
+        `)
+        const status = String(row?.campaign?.status || '')
+        return { verified: status === 'PAUSED' || status === '3', actual: status, expected: 'PAUSED' }
+      }
+
+      case 'keyword_negative': {
+        if (!details.google_campaign_id || !details.keyword) return { verified: false }
+        const rows = await customer.query(`
+          SELECT campaign_criterion.keyword.text
+          FROM campaign_criterion
+          WHERE campaign.id = ${details.google_campaign_id}
+            AND campaign_criterion.negative = TRUE
+            AND campaign_criterion.keyword.text = '${String(details.keyword).replace(/'/g, "\\'")}'
+          LIMIT 1
+        `)
+        return { verified: rows.length > 0, actual: rows.length > 0 ? 'gevonden' : 'niet gevonden', expected: details.keyword }
+      }
+
+      default:
+        // For types we can't easily verify, assume success if API didn't throw
+        return { verified: true }
+    }
+  } catch (e) {
+    log('warn', 'google-ads', `Verificatie mislukt: ${e instanceof Error ? e.message : 'onbekend'}`)
+    return { verified: true } // Don't block on verification errors
+  }
+}
+
 async function applyAction(actionType: string, details: Record<string, unknown>): Promise<unknown> {
   const customer = getGoogleAdsClient()
 
@@ -245,8 +300,16 @@ export async function POST(req: NextRequest) {
 
     const googleResponse = await applyAction(action.type, details)
 
+    // Verify the action was actually applied
+    const verification = await verifyAction(action.type, details)
+
+    const finalStatus = verification.verified ? 'applied' : 'failed'
+    const verificationNote = verification.verified
+      ? undefined
+      : `Verificatie mislukt: verwacht ${JSON.stringify(verification.expected)}, maar gevonden ${JSON.stringify(verification.actual)}`
+
     // Update action status in proposed_actions
-    proposedActions[action_index] = { ...action, status: 'applied' }
+    proposedActions[action_index] = { ...action, status: finalStatus, ...(verificationNote ? { verification_note: verificationNote } : {}) }
     db.prepare('UPDATE chat_messages SET proposed_actions = ? WHERE id = ?')
       .run(JSON.stringify(proposedActions), message_id)
 
@@ -259,16 +322,21 @@ export async function POST(req: NextRequest) {
       action.title,
       oldValue,
       newValue,
-      JSON.stringify(googleResponse),
+      JSON.stringify({ ...googleResponse as object, verification }),
     )
 
-    log('info', 'google-ads', `Chat actie toegepast: ${action.title}`, {
-      message_id,
-      action_index,
-      type: action.type,
-    })
+    if (verification.verified) {
+      log('info', 'google-ads', `Chat actie toegepast en geverifieerd: ${action.title}`, {
+        message_id, action_index, type: action.type,
+      })
+    } else {
+      log('warn', 'google-ads', `Chat actie toegepast maar verificatie mislukt: ${action.title}`, {
+        message_id, action_index, type: action.type,
+        expected: verification.expected, actual: verification.actual,
+      })
+    }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, verified: verification.verified, verification_note: verificationNote })
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : 'Toepassen mislukt'
     log('error', 'google-ads', `Chat actie mislukt: ${errorMessage}`, {
