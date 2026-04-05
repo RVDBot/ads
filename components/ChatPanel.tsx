@@ -18,6 +18,15 @@ interface Message {
   proposedActions?: Array<{ type: string; title: string; details: Record<string, unknown>; status: string }>
 }
 
+function mapMessages(raw: any[]): Message[] {
+  return raw.map(m => ({
+    id: m.id,
+    role: m.role,
+    content: m.content || '',
+    proposedActions: m.proposedActions || (m.proposed_actions ? JSON.parse(m.proposed_actions) : undefined),
+  }))
+}
+
 function toolLabel(name: string): string {
   const labels: Record<string, string> = {
     get_campaign_metrics: 'Metrics ophalen',
@@ -64,7 +73,7 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
         const msgRes = await apiFetch(`/api/chat/threads/${latest.id}`)
         if (!msgRes.ok) return
         const msgData = await msgRes.json()
-        setMessages(msgData.messages || [])
+        setMessages(mapMessages(msgData.messages || []))
       } catch {
         // ignore load errors
       }
@@ -78,7 +87,7 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
       const res = await apiFetch(`/api/chat/threads/${threadId}`)
       if (!res.ok) return
       const data = await res.json()
-      setMessages(data.messages || [])
+      setMessages(mapMessages(data.messages || []))
     } catch {
       // ignore
     }
