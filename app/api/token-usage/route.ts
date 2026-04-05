@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
 
   function formatModelBreakdown(rows: TokenRow[]) {
     return rows.map(r => ({
-      model: r.model || 'onbekend',
+      model: r.model || 'claude-sonnet-4-6',
       input: r.input ?? 0,
       output: r.output ?? 0,
       cost: calcCost(r.model, r.input ?? 0, r.output ?? 0),

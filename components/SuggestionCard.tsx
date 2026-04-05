@@ -74,7 +74,12 @@ export default function SuggestionCard({ id, title, description, priority, type,
   try { parsedDetails = JSON.parse(details) } catch { /* empty */ }
 
   return (
-    <div className="bg-surface-0 border border-border-subtle rounded-xl p-4">
+    <div className="bg-surface-0 border border-border-subtle rounded-xl p-4 relative">
+      <button onClick={() => openChat('suggestion', id, title)}
+        className="absolute top-3 right-3 p-1.5 text-text-tertiary hover:text-accent hover:bg-accent-subtle rounded-lg transition-colors"
+        title="Bespreek met AI">
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
+      </button>
       <div className="flex items-start gap-3">
         <div className="flex flex-col gap-1.5 shrink-0">
           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md whitespace-nowrap ${badge.className}`}>{badge.label}</span>
@@ -103,12 +108,7 @@ export default function SuggestionCard({ id, title, description, priority, type,
             <span className="inline-block mt-2 text-[11px] font-medium text-text-tertiary bg-surface-2 px-2 py-0.5 rounded-md">Genegeerd</span>
           )}
 
-          {status !== 'pending' && (
-            <button onClick={() => openChat('suggestion', id, title)}
-              className="text-[11px] text-accent hover:underline mt-2">
-              Bespreek met AI
-            </button>
-          )}
+
 
           {Object.keys(parsedDetails).length > 0 && (
             <button onClick={() => setExpanded(!expanded)} className="text-[11px] text-accent mt-2 hover:underline">
@@ -129,10 +129,7 @@ export default function SuggestionCard({ id, title, description, priority, type,
               className="px-3.5 py-1.5 bg-accent text-white text-[12px] font-semibold rounded-lg hover:bg-accent-hover disabled:opacity-50">
               {loading === 'apply' ? '...' : 'Pas toe'}
             </button>
-            <button onClick={() => openChat('suggestion', id, title)}
-              className="px-3 py-1.5 text-accent text-[12px] font-medium rounded-lg hover:bg-accent-subtle disabled:opacity-50">
-              Bespreek
-            </button>
+
             <button onClick={handleDismiss} disabled={!!loading}
               className="px-3 py-1.5 text-text-tertiary text-[12px] font-medium rounded-lg hover:bg-surface-2 disabled:opacity-50">
               {loading === 'dismiss' ? '...' : 'Negeer'}
