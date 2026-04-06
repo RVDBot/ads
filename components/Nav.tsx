@@ -2,8 +2,8 @@
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
-import { apiFetch } from '@/lib/api'
 import { useChatPanel } from './ChatProvider'
+import { useSync } from './SyncProvider'
 
 const tabs = [
   { label: 'Dashboard', href: '/' },
@@ -28,15 +28,8 @@ function timeAgo(iso: string): string {
 export default function Nav() {
   const pathname = usePathname()
   const { openChat } = useChatPanel()
-  const [syncing, setSyncing] = useState(false)
-  const [lastSync, setLastSync] = useState<string | null>(null)
-
-  useEffect(() => {
-    apiFetch('/api/sync')
-      .then(r => r.json())
-      .then(d => { if (d.lastSyncAt) setLastSync(d.lastSyncAt) })
-      .catch(() => {})
-  }, [])
+  const { status, lastSyncAt, startSync } = useSync()
+  const syncing = status === 'running'
 
   // Update "x min geleden" every 30 seconds
   const [, setTick] = useState(0)
@@ -44,20 +37,6 @@ export default function Nav() {
     const id = setInterval(() => setTick(t => t + 1), 30000)
     return () => clearInterval(id)
   }, [])
-
-  async function handleSync() {
-    setSyncing(true)
-    try {
-      await apiFetch('/api/sync', { method: 'POST' })
-      // Refresh sync status
-      const r = await apiFetch('/api/sync')
-      const d = await r.json()
-      if (d.lastSyncAt) setLastSync(d.lastSyncAt)
-      window.dispatchEvent(new Event('sync-complete'))
-    } finally {
-      setSyncing(false)
-    }
-  }
 
   return (
     <nav className="sticky top-0 z-40 bg-surface-0/80 backdrop-blur-xl border-b border-border-subtle px-6">
@@ -84,12 +63,23 @@ export default function Nav() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <span className="text-[11px] text-text-tertiary">
-            Laatste sync: {lastSync ? timeAgo(lastSync) : '—'}
-          </span>
-          <button onClick={handleSync} disabled={syncing}
+          {syncing && (
+            <div className="flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-accent" />
+              </span>
+              <span className="text-[11px] text-accent font-medium">Syncing...</span>
+            </div>
+          )}
+          {!syncing && (
+            <span className="text-[11px] text-text-tertiary">
+              Laatste sync: {lastSyncAt ? timeAgo(lastSyncAt) : '\u2014'}
+            </span>
+          )}
+          <button onClick={startSync} disabled={syncing}
             className="text-[12px] font-medium px-3.5 py-1.5 rounded-lg bg-accent text-white hover:bg-accent-hover disabled:opacity-50 transition-colors">
-            {syncing ? 'Syncing...' : 'Sync nu'}
+            {syncing ? 'Bezig...' : 'Sync nu'}
           </button>
           <button onClick={() => openChat('global', null, 'AI Assistent')}
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-2 text-text-tertiary transition-colors"
