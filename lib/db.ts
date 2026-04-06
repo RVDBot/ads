@@ -67,6 +67,19 @@ function initSchema(db: Database.Database) {
       FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS adgroup_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      adgroup_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      cost REAL NOT NULL DEFAULT 0,
+      clicks INTEGER NOT NULL DEFAULT 0,
+      impressions INTEGER NOT NULL DEFAULT 0,
+      conversions REAL NOT NULL DEFAULT 0,
+      conversion_value REAL NOT NULL DEFAULT 0,
+      FOREIGN KEY (adgroup_id) REFERENCES ad_groups(id) ON DELETE CASCADE,
+      UNIQUE(adgroup_id, date)
+    );
+
     CREATE TABLE IF NOT EXISTS keywords (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       adgroup_id INTEGER NOT NULL,

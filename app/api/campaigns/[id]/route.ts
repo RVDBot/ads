@@ -17,14 +17,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const adGroups = db.prepare(`
     SELECT ag.*,
       (SELECT COUNT(*) FROM keywords k WHERE k.adgroup_id = ag.id) as keyword_count,
-      COALESCE(SUM(km.cost), 0) as total_cost,
-      COALESCE(SUM(km.clicks), 0) as total_clicks,
-      COALESCE(SUM(km.conversions), 0) as total_conversions,
-      COALESCE(SUM(km.conversion_value), 0) as total_value,
-      CASE WHEN SUM(km.cost) > 0 THEN SUM(km.conversion_value) / SUM(km.cost) ELSE 0 END as roas
+      COALESCE(SUM(am.cost), 0) as total_cost,
+      COALESCE(SUM(am.clicks), 0) as total_clicks,
+      COALESCE(SUM(am.conversions), 0) as total_conversions,
+      COALESCE(SUM(am.conversion_value), 0) as total_value,
+      CASE WHEN SUM(am.cost) > 0 THEN SUM(am.conversion_value) / SUM(am.cost) ELSE 0 END as roas
     FROM ad_groups ag
-    LEFT JOIN keywords k ON k.adgroup_id = ag.id
-    LEFT JOIN keyword_metrics km ON km.keyword_id = k.id AND km.date >= date('now', '-7 days')
+    LEFT JOIN adgroup_metrics am ON am.adgroup_id = ag.id AND am.date >= date('now', '-7 days')
     WHERE ag.campaign_id = ?
     GROUP BY ag.id
     ORDER BY total_cost DESC

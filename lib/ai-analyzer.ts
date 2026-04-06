@@ -87,14 +87,13 @@ export async function runAnalysis(period = 14): Promise<number> {
   // Ad group level performance
   const adGroupPerformance = db.prepare(`
     SELECT ag.name as adgroup, c.name as campaign, c.country, ag.status,
-      SUM(km.cost) as cost, SUM(km.clicks) as clicks, SUM(km.impressions) as impressions,
-      SUM(km.conversions) as conversions, SUM(km.conversion_value) as value,
-      CASE WHEN SUM(km.cost) > 0 THEN SUM(km.conversion_value) / SUM(km.cost) ELSE 0 END as roas,
-      COUNT(DISTINCT k.id) as keyword_count
+      SUM(am.cost) as cost, SUM(am.clicks) as clicks, SUM(am.impressions) as impressions,
+      SUM(am.conversions) as conversions, SUM(am.conversion_value) as value,
+      CASE WHEN SUM(am.cost) > 0 THEN SUM(am.conversion_value) / SUM(am.cost) ELSE 0 END as roas,
+      (SELECT COUNT(*) FROM keywords k WHERE k.adgroup_id = ag.id) as keyword_count
     FROM ad_groups ag
     JOIN campaigns c ON c.id = ag.campaign_id
-    LEFT JOIN keywords k ON k.adgroup_id = ag.id
-    LEFT JOIN keyword_metrics km ON km.keyword_id = k.id AND km.date >= date('now', '-' || ? || ' days')
+    LEFT JOIN adgroup_metrics am ON am.adgroup_id = ag.id AND am.date >= date('now', '-' || ? || ' days')
     WHERE c.status = 'ENABLED'
     GROUP BY ag.id
     HAVING cost > 0

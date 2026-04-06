@@ -24,10 +24,11 @@ export async function runFullSync(trigger: 'manual' | 'scheduled' = 'manual'): P
 
   // 1. Google Ads
   try {
-    const { syncCampaigns, syncDailyMetrics, syncAdGroups, syncKeywords, syncKeywordMetrics, syncSearchTerms, syncAds, syncAdMetrics, syncShoppingPerformance } = await import('./google-ads')
+    const { syncCampaigns, syncDailyMetrics, syncAdGroups, syncAdGroupMetrics, syncKeywords, syncKeywordMetrics, syncSearchTerms, syncAds, syncAdMetrics, syncShoppingPerformance } = await import('./google-ads')
     await syncCampaigns()
     await syncDailyMetrics('LAST_30_DAYS')
     await syncAdGroups()
+    await syncAdGroupMetrics('LAST_30_DAYS')
     await syncKeywords()
     await syncKeywordMetrics('LAST_30_DAYS')
     await syncSearchTerms('LAST_30_DAYS')

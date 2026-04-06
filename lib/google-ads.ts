@@ -263,6 +263,53 @@ export async function syncAdGroups() {
   log('info', 'google-ads', `${rows.length - skipped} ad groups gesynchroniseerd${skipped ? ` (${skipped} overgeslagen, campaign niet gevonden)` : ''}`)
 }
 
+export async function syncAdGroupMetrics(dateRange: string = 'LAST_30_DAYS') {
+  const customer = getClient()
+  const db = getDb()
+
+  const rows = await customer.query(`
+    SELECT
+      ad_group.id,
+      metrics.cost_micros,
+      metrics.clicks,
+      metrics.impressions,
+      metrics.conversions,
+      metrics.conversions_value,
+      segments.date
+    FROM ad_group
+    WHERE segments.date DURING ${dateRange}
+    AND ad_group.status != 'REMOVED'
+  `)
+
+  const findAdGroup = db.prepare('SELECT id FROM ad_groups WHERE google_adgroup_id = ?')
+  const stmt = db.prepare(`
+    INSERT INTO adgroup_metrics (adgroup_id, date, cost, clicks, impressions, conversions, conversion_value)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(adgroup_id, date) DO UPDATE SET
+      cost = excluded.cost, clicks = excluded.clicks, impressions = excluded.impressions,
+      conversions = excluded.conversions, conversion_value = excluded.conversion_value
+  `)
+
+  let skipped = 0
+  const tx = db.transaction(() => {
+    for (const row of rows) {
+      const ag = findAdGroup.get(String(row.ad_group?.id)) as { id: number } | undefined
+      if (!ag) { skipped++; continue }
+      stmt.run(
+        ag.id, row.segments?.date,
+        Number(row.metrics?.cost_micros || 0) / 1_000_000,
+        Number(row.metrics?.clicks || 0),
+        Number(row.metrics?.impressions || 0),
+        Number(row.metrics?.conversions || 0),
+        Number(row.metrics?.conversions_value || 0)
+      )
+    }
+  })
+  tx()
+
+  log('info', 'google-ads', `${rows.length - skipped} ad group metric-rijen gesynchroniseerd${skipped ? ` (${skipped} overgeslagen)` : ''}`)
+}
+
 export async function syncKeywords() {
   const customer = getClient()
   const db = getDb()
