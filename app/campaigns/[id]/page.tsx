@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Nav from '@/components/Nav'
 import { apiFetch } from '@/lib/api'
-import { formatCurrency, formatRoas, countryFlag } from '@/lib/utils'
+import { formatCurrency, formatRoas } from '@/lib/utils'
 import { useChatPanel } from '@/components/ChatProvider'
 
 interface Campaign {
@@ -87,18 +87,72 @@ const matchTypeColors: Record<string, string> = {
   BROAD: 'bg-warning-subtle text-warning',
 }
 
+const PERIODS = [
+  { days: 7, label: '7d' },
+  { days: 14, label: '14d' },
+  { days: 30, label: '30d' },
+  { days: 90, label: '90d' },
+]
+
 function statusDotColor(status: string): string {
   if (status === 'ENABLED') return '#0f9960'
   if (status === 'PAUSED') return '#8b9098'
   return '#dc2626'
 }
 
-function roasColor(roas: number): string {
-  if (roas >= 3) return '#0f9960'
-  if (roas >= 1) return '#d97706'
-  return '#dc2626'
+// --- Sortable table hook ---
+type SortDir = 'asc' | 'desc'
+
+function useSort<T>(data: T[], defaultKey: keyof T & string, defaultDir: SortDir = 'desc') {
+  const [sortKey, setSortKey] = useState<keyof T & string>(defaultKey)
+  const [sortDir, setSortDir] = useState<SortDir>(defaultDir)
+
+  const toggle = useCallback((key: keyof T & string) => {
+    if (key === sortKey) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDir('desc')
+    }
+  }, [sortKey])
+
+  const sorted = useMemo(() => {
+    return [...data].sort((a, b) => {
+      const av = a[sortKey], bv = b[sortKey]
+      if (av == null && bv == null) return 0
+      if (av == null) return 1
+      if (bv == null) return -1
+      const cmp = typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number)
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+  }, [data, sortKey, sortDir])
+
+  return { sorted, sortKey, sortDir, toggle }
 }
 
+function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
+  return (
+    <svg className={`inline-block w-3 h-3 ml-0.5 ${active ? 'text-text-primary' : 'text-text-tertiary/40'}`} viewBox="0 0 12 12" fill="currentColor">
+      {dir === 'asc' || !active
+        ? <path d="M6 2.5L9.5 7H2.5L6 2.5Z" />
+        : <path d="M6 9.5L2.5 5H9.5L6 9.5Z" />}
+    </svg>
+  )
+}
+
+function Th({ label, sortKey: key, sort, align = 'right' }: { label: string; sortKey: string; sort: { sortKey: string; sortDir: SortDir; toggle: (k: any) => void }; align?: 'left' | 'right' }) {
+  return (
+    <th
+      className={`${align === 'left' ? 'text-left' : 'text-right'} text-[11px] font-medium text-text-tertiary px-4 py-2 cursor-pointer select-none hover:text-text-secondary transition-colors`}
+      onClick={() => sort.toggle(key)}
+    >
+      {label}
+      <SortIcon active={sort.sortKey === key} dir={sort.sortDir} />
+    </th>
+  )
+}
+
+// --- Chart ---
 function MetricsChart({ data }: { data: DailyMetric[] }) {
   if (data.length < 2) return null
   const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date))
@@ -140,20 +194,15 @@ function MetricsChart({ data }: { data: DailyMetric[] }) {
 
   return (
     <svg width="100%" viewBox={`0 0 ${w} ${h}`} className="block">
-      {/* Grid lines */}
       {[0, 0.25, 0.5, 0.75, 1].map(f => (
         <line key={f} x1={pad.left} x2={w - pad.right}
           y1={pad.top + ch * (1 - f)} y2={pad.top + ch * (1 - f)}
           stroke="var(--color-border-subtle)" strokeWidth="0.5" />
       ))}
-      {/* Cost area */}
       <path d={`${smoothPath(costPoints)} L ${costPoints[costPoints.length - 1].x} ${pad.top + ch} L ${costPoints[0].x} ${pad.top + ch} Z`}
         fill="var(--color-accent)" fillOpacity="0.08" />
-      {/* Cost line */}
       <path d={smoothPath(costPoints)} fill="none" stroke="var(--color-accent)" strokeWidth="1.5" />
-      {/* ROAS line */}
       <path d={smoothPath(roasPoints)} fill="none" stroke="#0f9960" strokeWidth="1.5" strokeDasharray="4 2" />
-      {/* Axis labels */}
       <text x={pad.left - 6} y={pad.top + 4} textAnchor="end" className="fill-text-tertiary" fontSize="9">
         {formatCurrency(maxCost)}
       </text>
@@ -169,7 +218,6 @@ function MetricsChart({ data }: { data: DailyMetric[] }) {
           </text>
         )
       })}
-      {/* Legend */}
       <line x1={pad.left} y1={h - 14} x2={pad.left + 14} y2={h - 14} stroke="var(--color-accent)" strokeWidth="1.5" />
       <text x={pad.left + 18} y={h - 11} className="fill-text-tertiary" fontSize="9">Kosten</text>
       <line x1={pad.left + 60} y1={h - 14} x2={pad.left + 74} y2={h - 14} stroke="#0f9960" strokeWidth="1.5" strokeDasharray="4 2" />
@@ -178,6 +226,7 @@ function MetricsChart({ data }: { data: DailyMetric[] }) {
   )
 }
 
+// --- Main page ---
 export default function CampaignDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -191,10 +240,11 @@ export default function CampaignDetailPage() {
   const [searchTerms, setSearchTerms] = useState<SearchTerm[]>([])
   const [products, setProducts] = useState<ProductMetric[]>([])
   const [loading, setLoading] = useState(true)
+  const [days, setDays] = useState(30)
 
   useEffect(() => {
     setLoading(true)
-    apiFetch(`/api/campaigns/${id}`)
+    apiFetch(`/api/campaigns/${id}?days=${days}`)
       .then(r => r.json())
       .then(d => {
         setCampaign(d.campaign)
@@ -206,7 +256,25 @@ export default function CampaignDetailPage() {
         setLoading(false)
       })
       .catch(() => setLoading(false))
-  }, [id])
+  }, [id, days])
+
+  const isShopping = campaign?.type === 'SHOPPING' || campaign?.type === 'PERFORMANCE_MAX'
+
+  // Sort hooks (always called, never conditional)
+  const agSort = useSort(adGroups, 'total_cost')
+  const kwSort = useSort(keywords, 'total_cost')
+  const stSort = useSort(searchTerms, 'cost')
+  const prodSort = useSort(products, 'total_cost')
+
+  // Enrich keywords with computed ROAS for sorting
+  const kwWithRoas = useMemo(() =>
+    kwSort.sorted.map(k => ({ ...k, roas: k.total_cost > 0 ? (k.total_value || 0) / k.total_cost : 0 })),
+    [kwSort.sorted]
+  )
+  const stWithRoas = useMemo(() =>
+    stSort.sorted.map(s => ({ ...s, roas: s.cost > 0 ? (s.value || 0) / s.cost : 0 })),
+    [stSort.sorted]
+  )
 
   if (loading) {
     return (
@@ -275,10 +343,29 @@ export default function CampaignDetailPage() {
           </div>
         </div>
 
-        {/* KPI cards */}
+        {/* Period selector + KPI cards */}
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-[12px] text-text-tertiary font-medium">Periode:</span>
+          <div className="flex bg-surface-1 border border-border-subtle rounded-lg overflow-hidden">
+            {PERIODS.map(p => (
+              <button
+                key={p.days}
+                onClick={() => setDays(p.days)}
+                className={`px-3 py-1 text-[12px] font-semibold transition-colors ${
+                  days === p.days
+                    ? 'bg-accent text-white'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="grid grid-cols-5 gap-3 mb-5">
           {([
-            ['Kosten (30d)', formatCurrency(totals.cost), ''],
+            [`Kosten (${days}d)`, formatCurrency(totals.cost), ''],
             ['ROAS', formatRoas(avgRoas), avgRoas >= 3 ? 'text-success' : avgRoas >= 1 ? 'text-warning' : 'text-danger'],
             ['Klikken', totals.clicks.toLocaleString('nl-NL'), ''],
             ['Conversies', Math.round(totals.conversions).toLocaleString('nl-NL'), ''],
@@ -294,13 +381,13 @@ export default function CampaignDetailPage() {
         {/* Chart */}
         {metrics.length >= 2 && (
           <div className="bg-surface-1 border border-border-subtle rounded-2xl p-4 mb-5">
-            <div className="text-[13px] font-semibold text-text-primary mb-3">Prestaties (30 dagen)</div>
+            <div className="text-[13px] font-semibold text-text-primary mb-3">Prestaties ({days} dagen)</div>
             <MetricsChart data={metrics} />
           </div>
         )}
 
         {/* Ad Groups */}
-        {adGroups.length > 0 && (
+        {agSort.sorted.length > 0 && (
           <div className="bg-surface-1 border border-border-subtle rounded-2xl overflow-hidden mb-5">
             <div className="px-4 py-3 border-b border-border-subtle">
               <span className="text-[13px] font-semibold text-text-primary">Advertentiegroepen ({adGroups.length})</span>
@@ -308,17 +395,18 @@ export default function CampaignDetailPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border-subtle">
-                  <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2">Naam</th>
-                  <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2">Status</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Zoekwoorden</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Kosten (7d)</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Klikken</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Conv.</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">ROAS</th>
+                  <Th label="Naam" sortKey="name" sort={agSort} align="left" />
+                  <Th label="Status" sortKey="status" sort={agSort} align="left" />
+                  {!isShopping && <Th label="Zoekwoorden" sortKey="keyword_count" sort={agSort} />}
+                  <Th label={`Kosten (${days}d)`} sortKey="total_cost" sort={agSort} />
+                  <Th label="Klikken" sortKey="total_clicks" sort={agSort} />
+                  <Th label="Conv." sortKey="total_conversions" sort={agSort} />
+                  <Th label="Waarde" sortKey="total_value" sort={agSort} />
+                  <Th label="ROAS" sortKey="roas" sort={agSort} />
                 </tr>
               </thead>
               <tbody>
-                {adGroups.map((ag, i) => (
+                {agSort.sorted.map((ag, i) => (
                   <tr key={ag.id} className={`border-b border-border-subtle last:border-0 transition-colors ${i % 2 === 0 ? 'bg-surface-1' : 'bg-surface-0/50'} hover:bg-surface-hover`}>
                     <td className="px-4 py-2 text-[13px] font-medium text-text-primary">{ag.name}</td>
                     <td className="px-4 py-2">
@@ -327,10 +415,11 @@ export default function CampaignDetailPage() {
                         {ag.status === 'ENABLED' ? 'Live' : ag.status === 'PAUSED' ? 'Gepauzeerd' : ag.status}
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{ag.keyword_count}</td>
+                    {!isShopping && <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{ag.keyword_count}</td>}
                     <td className="px-4 py-2 text-[13px] text-right font-medium text-text-primary">{formatCurrency(ag.total_cost || 0)}</td>
                     <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{ag.total_clicks || 0}</td>
                     <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{Math.round(ag.total_conversions || 0)}</td>
+                    <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{formatCurrency(ag.total_value || 0)}</td>
                     <td className={`px-4 py-2 text-[13px] text-right font-semibold ${(ag.roas || 0) >= 3 ? 'text-success' : (ag.roas || 0) >= 1 ? 'text-warning' : 'text-danger'}`}>
                       {formatRoas(ag.roas || 0)}
                     </td>
@@ -341,53 +430,8 @@ export default function CampaignDetailPage() {
           </div>
         )}
 
-        {/* Keywords */}
-        {keywords.length > 0 && (
-          <div className="bg-surface-1 border border-border-subtle rounded-2xl overflow-hidden mb-5">
-            <div className="px-4 py-3 border-b border-border-subtle">
-              <span className="text-[13px] font-semibold text-text-primary">Zoekwoorden ({keywords.length})</span>
-            </div>
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border-subtle">
-                  <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2">Zoekwoord</th>
-                  <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2">Match</th>
-                  <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2">Groep</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Kosten</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Klikken</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Conv.</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">ROAS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {keywords.map((k, i) => {
-                  const mt = MATCH_TYPE_MAP[k.match_type] || k.match_type
-                  const roas = k.total_cost > 0 ? (k.total_value || 0) / k.total_cost : 0
-                  return (
-                    <tr key={k.id} className={`border-b border-border-subtle last:border-0 transition-colors ${i % 2 === 0 ? 'bg-surface-1' : 'bg-surface-0/50'} hover:bg-surface-hover`}>
-                      <td className="px-4 py-2 text-[13px] font-medium text-text-primary max-w-[200px] truncate">{k.text}</td>
-                      <td className="px-4 py-2">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${matchTypeColors[mt] || 'bg-surface-3 text-text-tertiary'}`}>
-                          {mt}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-[12px] text-text-secondary truncate max-w-[150px]">{k.adgroup_name}</td>
-                      <td className="px-4 py-2 text-[13px] text-right font-medium text-text-primary">{formatCurrency(k.total_cost || 0)}</td>
-                      <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{k.total_clicks || 0}</td>
-                      <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{Math.round(k.total_conversions || 0)}</td>
-                      <td className={`px-4 py-2 text-[13px] text-right font-semibold ${roas >= 3 ? 'text-success' : roas >= 1 ? 'text-warning' : 'text-danger'}`}>
-                        {formatRoas(roas)}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Products (Shopping/PMAX) */}
-        {products.length > 0 && (
+        {/* Products (Shopping/PMAX only) */}
+        {prodSort.sorted.length > 0 && (
           <div className="bg-surface-1 border border-border-subtle rounded-2xl overflow-hidden mb-5">
             <div className="px-4 py-3 border-b border-border-subtle">
               <span className="text-[13px] font-semibold text-text-primary">Producten ({products.length})</span>
@@ -395,16 +439,16 @@ export default function CampaignDetailPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border-subtle">
-                  <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2">Product</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Kosten (30d)</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Klikken</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Conv.</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Waarde</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">ROAS</th>
+                  <Th label="Product" sortKey="product_title" sort={prodSort} align="left" />
+                  <Th label={`Kosten (${days}d)`} sortKey="total_cost" sort={prodSort} />
+                  <Th label="Klikken" sortKey="total_clicks" sort={prodSort} />
+                  <Th label="Conv." sortKey="total_conversions" sort={prodSort} />
+                  <Th label="Waarde" sortKey="total_value" sort={prodSort} />
+                  <Th label="ROAS" sortKey="roas" sort={prodSort} />
                 </tr>
               </thead>
               <tbody>
-                {products.map((p, i) => (
+                {prodSort.sorted.map((p, i) => (
                   <tr key={p.product_id || i} className={`border-b border-border-subtle last:border-0 transition-colors ${i % 2 === 0 ? 'bg-surface-1' : 'bg-surface-0/50'} hover:bg-surface-hover`}>
                     <td className="px-4 py-2 text-[13px] font-medium text-text-primary max-w-[250px] truncate" title={p.product_title}>{p.product_title}</td>
                     <td className="px-4 py-2 text-[13px] text-right font-medium text-text-primary">{formatCurrency(p.total_cost || 0)}</td>
@@ -421,8 +465,52 @@ export default function CampaignDetailPage() {
           </div>
         )}
 
-        {/* Search Terms */}
-        {searchTerms.length > 0 && (
+        {/* Keywords (Search campaigns only) */}
+        {!isShopping && kwWithRoas.length > 0 && (
+          <div className="bg-surface-1 border border-border-subtle rounded-2xl overflow-hidden mb-5">
+            <div className="px-4 py-3 border-b border-border-subtle">
+              <span className="text-[13px] font-semibold text-text-primary">Zoekwoorden ({keywords.length})</span>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border-subtle">
+                  <Th label="Zoekwoord" sortKey="text" sort={kwSort} align="left" />
+                  <Th label="Match" sortKey="match_type" sort={kwSort} align="left" />
+                  <Th label="Groep" sortKey="adgroup_name" sort={kwSort} align="left" />
+                  <Th label="Kosten" sortKey="total_cost" sort={kwSort} />
+                  <Th label="Klikken" sortKey="total_clicks" sort={kwSort} />
+                  <Th label="Conv." sortKey="total_conversions" sort={kwSort} />
+                  <Th label="ROAS" sortKey="total_value" sort={kwSort} />
+                </tr>
+              </thead>
+              <tbody>
+                {kwWithRoas.map((k, i) => {
+                  const mt = MATCH_TYPE_MAP[k.match_type] || k.match_type
+                  return (
+                    <tr key={k.id} className={`border-b border-border-subtle last:border-0 transition-colors ${i % 2 === 0 ? 'bg-surface-1' : 'bg-surface-0/50'} hover:bg-surface-hover`}>
+                      <td className="px-4 py-2 text-[13px] font-medium text-text-primary max-w-[200px] truncate">{k.text}</td>
+                      <td className="px-4 py-2">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${matchTypeColors[mt] || 'bg-surface-3 text-text-tertiary'}`}>
+                          {mt}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-[12px] text-text-secondary truncate max-w-[150px]">{k.adgroup_name}</td>
+                      <td className="px-4 py-2 text-[13px] text-right font-medium text-text-primary">{formatCurrency(k.total_cost || 0)}</td>
+                      <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{k.total_clicks || 0}</td>
+                      <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{Math.round(k.total_conversions || 0)}</td>
+                      <td className={`px-4 py-2 text-[13px] text-right font-semibold ${k.roas >= 3 ? 'text-success' : k.roas >= 1 ? 'text-warning' : 'text-danger'}`}>
+                        {formatRoas(k.roas)}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Search Terms (Search campaigns only) */}
+        {!isShopping && stSort.sorted.length > 0 && (
           <div className="bg-surface-1 border border-border-subtle rounded-2xl overflow-hidden">
             <div className="px-4 py-3 border-b border-border-subtle">
               <span className="text-[13px] font-semibold text-text-primary">Zoekopdrachten ({searchTerms.length})</span>
@@ -430,15 +518,15 @@ export default function CampaignDetailPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border-subtle">
-                  <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2">Zoekterm</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Kosten</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Klikken</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Conversies</th>
-                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Waarde</th>
+                  <Th label="Zoekterm" sortKey="search_term" sort={stSort} align="left" />
+                  <Th label="Kosten" sortKey="cost" sort={stSort} />
+                  <Th label="Klikken" sortKey="clicks" sort={stSort} />
+                  <Th label="Conversies" sortKey="conversions" sort={stSort} />
+                  <Th label="Waarde" sortKey="value" sort={stSort} />
                 </tr>
               </thead>
               <tbody>
-                {searchTerms.map((st, i) => (
+                {stSort.sorted.map((st, i) => (
                   <tr key={i} className={`border-b border-border-subtle last:border-0 transition-colors ${i % 2 === 0 ? 'bg-surface-1' : 'bg-surface-0/50'} hover:bg-surface-hover`}>
                     <td className="px-4 py-2 text-[13px] font-medium text-text-primary">{st.search_term}</td>
                     <td className="px-4 py-2 text-[13px] text-right font-medium text-text-primary">{formatCurrency(st.cost || 0)}</td>
