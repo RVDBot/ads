@@ -152,30 +152,57 @@ function Th({ label, sortKey: key, sort, align = 'right' }: { label: string; sor
   )
 }
 
+const SHORT_MONTHS = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec']
+
+function fmtDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  return `${d.getDate()} ${SHORT_MONTHS[d.getMonth()]}`
+}
+
+function niceScale(max: number, steps: number): number[] {
+  if (max <= 0) return [0]
+  const rough = max / steps
+  const mag = Math.pow(10, Math.floor(Math.log10(rough)))
+  const nice = [1, 2, 2.5, 5, 10].find(n => n * mag >= rough)! * mag
+  const vals: number[] = [0]
+  for (let v = nice; v <= max * 1.05; v += nice) vals.push(Math.round(v * 100) / 100)
+  return vals
+}
+
+function fmtAxisValue(v: number, isCurrency: boolean): string {
+  if (v === 0) return isCurrency ? '\u20AC0' : '0'
+  if (isCurrency) {
+    if (v >= 1000) return `\u20AC${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k`
+    return `\u20AC${v.toFixed(v < 10 ? 1 : 0)}`
+  }
+  return v.toFixed(1) + 'x'
+}
+
 // --- Chart ---
 function MetricsChart({ data }: { data: DailyMetric[] }) {
   if (data.length < 2) return null
   const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date))
 
   const w = 700
-  const h = 180
-  const pad = { top: 10, right: 50, bottom: 24, left: 50 }
+  const h = 200
+  const pad = { top: 16, right: 48, bottom: 28, left: 48 }
   const cw = w - pad.left - pad.right
   const ch = h - pad.top - pad.bottom
 
   const maxCost = Math.max(...sorted.map(d => d.cost), 1)
-  const maxRoas = Math.max(...sorted.map(d => d.roas), 1)
+  const maxRoas = Math.max(...sorted.map(d => d.roas), 0.5)
+
+  const costTicks = niceScale(maxCost, 4)
+  const roasTicks = niceScale(maxRoas, 4)
+  const costCeil = costTicks[costTicks.length - 1]
+  const roasCeil = roasTicks[roasTicks.length - 1]
 
   const xStep = cw / (sorted.length - 1)
 
-  const costPoints = sorted.map((d, i) => ({
-    x: pad.left + i * xStep,
-    y: pad.top + ch - (d.cost / maxCost) * ch,
-  }))
-  const roasPoints = sorted.map((d, i) => ({
-    x: pad.left + i * xStep,
-    y: pad.top + ch - (d.roas / maxRoas) * ch,
-  }))
+  const toY = (val: number, ceil: number) => pad.top + ch - (val / ceil) * ch
+
+  const costPoints = sorted.map((d, i) => ({ x: pad.left + i * xStep, y: toY(d.cost, costCeil) }))
+  const roasPoints = sorted.map((d, i) => ({ x: pad.left + i * xStep, y: toY(d.roas, roasCeil) }))
 
   function smoothPath(pts: { x: number; y: number }[]) {
     let path = `M ${pts[0].x} ${pts[0].y}`
@@ -190,38 +217,70 @@ function MetricsChart({ data }: { data: DailyMetric[] }) {
     return path
   }
 
-  const labels = sorted.filter((_, i) => i % Math.ceil(sorted.length / 6) === 0 || i === sorted.length - 1)
+  // X-axis: ~6 labels evenly spaced
+  const xLabelStep = Math.max(1, Math.ceil(sorted.length / 7))
+  const xLabels = sorted.filter((_, i) => i % xLabelStep === 0 || i === sorted.length - 1)
 
   return (
-    <svg width="100%" viewBox={`0 0 ${w} ${h}`} className="block">
-      {[0, 0.25, 0.5, 0.75, 1].map(f => (
-        <line key={f} x1={pad.left} x2={w - pad.right}
-          y1={pad.top + ch * (1 - f)} y2={pad.top + ch * (1 - f)}
-          stroke="var(--color-border-subtle)" strokeWidth="0.5" />
-      ))}
-      <path d={`${smoothPath(costPoints)} L ${costPoints[costPoints.length - 1].x} ${pad.top + ch} L ${costPoints[0].x} ${pad.top + ch} Z`}
-        fill="var(--color-accent)" fillOpacity="0.08" />
-      <path d={smoothPath(costPoints)} fill="none" stroke="var(--color-accent)" strokeWidth="1.5" />
-      <path d={smoothPath(roasPoints)} fill="none" stroke="#0f9960" strokeWidth="1.5" strokeDasharray="4 2" />
-      <text x={pad.left - 6} y={pad.top + 4} textAnchor="end" className="fill-text-tertiary" fontSize="9">
-        {formatCurrency(maxCost)}
-      </text>
-      <text x={w - pad.right + 6} y={pad.top + 4} textAnchor="start" className="fill-text-tertiary" fontSize="9">
-        {maxRoas.toFixed(1)}x
-      </text>
-      {labels.map(d => {
-        const i = sorted.indexOf(d)
+    <svg width="100%" viewBox={`0 0 ${w} ${h}`} className="block" style={{ fontFamily: 'inherit' }}>
+      {/* Grid lines + left axis labels (cost) */}
+      {costTicks.map(v => {
+        const y = toY(v, costCeil)
         return (
-          <text key={d.date} x={pad.left + i * xStep} y={h - 4} textAnchor="middle"
-            className="fill-text-tertiary" fontSize="9">
-            {d.date.slice(5)}
+          <g key={`cg-${v}`}>
+            <line x1={pad.left} x2={w - pad.right} y1={y} y2={y}
+              stroke="var(--color-border-subtle)" strokeWidth="0.5" />
+            <text x={pad.left - 6} y={y + 3} textAnchor="end" fontSize="8" className="fill-text-tertiary">
+              {fmtAxisValue(v, true)}
+            </text>
+          </g>
+        )
+      })}
+
+      {/* Right axis labels (ROAS) */}
+      {roasTicks.map(v => {
+        const y = toY(v, roasCeil)
+        return (
+          <text key={`rg-${v}`} x={w - pad.right + 6} y={y + 3} textAnchor="start" fontSize="8" className="fill-text-tertiary">
+            {fmtAxisValue(v, false)}
           </text>
         )
       })}
-      <line x1={pad.left} y1={h - 14} x2={pad.left + 14} y2={h - 14} stroke="var(--color-accent)" strokeWidth="1.5" />
-      <text x={pad.left + 18} y={h - 11} className="fill-text-tertiary" fontSize="9">Kosten</text>
-      <line x1={pad.left + 60} y1={h - 14} x2={pad.left + 74} y2={h - 14} stroke="#0f9960" strokeWidth="1.5" strokeDasharray="4 2" />
-      <text x={pad.left + 78} y={h - 11} className="fill-text-tertiary" fontSize="9">ROAS</text>
+
+      {/* Cost area fill */}
+      <path
+        d={`${smoothPath(costPoints)} L ${costPoints[costPoints.length - 1].x} ${pad.top + ch} L ${costPoints[0].x} ${pad.top + ch} Z`}
+        fill="var(--color-accent)" fillOpacity="0.06" />
+
+      {/* Cost line */}
+      <path d={smoothPath(costPoints)} fill="none" stroke="var(--color-accent)" strokeWidth="1.5" />
+
+      {/* ROAS line */}
+      <path d={smoothPath(roasPoints)} fill="none" stroke="#0f9960" strokeWidth="1.5" strokeDasharray="4 2" />
+
+      {/* Data points */}
+      {costPoints.map((p, i) => (
+        <circle key={`cp-${i}`} cx={p.x} cy={p.y} r="2" fill="var(--color-accent)" />
+      ))}
+      {roasPoints.map((p, i) => (
+        <circle key={`rp-${i}`} cx={p.x} cy={p.y} r="2" fill="#0f9960" />
+      ))}
+
+      {/* X-axis labels */}
+      {xLabels.map(d => {
+        const i = sorted.indexOf(d)
+        return (
+          <text key={d.date} x={pad.left + i * xStep} y={h - 6} textAnchor="middle" fontSize="8" className="fill-text-tertiary">
+            {fmtDate(d.date)}
+          </text>
+        )
+      })}
+
+      {/* Legend */}
+      <line x1={pad.left} y1={h - 1} x2={pad.left + 12} y2={h - 1} stroke="var(--color-accent)" strokeWidth="1.5" />
+      <text x={pad.left + 15} y={h} fontSize="8" className="fill-text-tertiary">Kosten</text>
+      <line x1={pad.left + 55} y1={h - 1} x2={pad.left + 67} y2={h - 1} stroke="#0f9960" strokeWidth="1.5" strokeDasharray="4 2" />
+      <text x={pad.left + 70} y={h} fontSize="8" className="fill-text-tertiary">ROAS</text>
     </svg>
   )
 }
