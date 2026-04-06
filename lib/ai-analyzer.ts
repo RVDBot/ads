@@ -84,6 +84,24 @@ export async function runAnalysis(period = 14): Promise<number> {
     }
   }
 
+  // Ad group level performance
+  const adGroupPerformance = db.prepare(`
+    SELECT ag.name as adgroup, c.name as campaign, c.country, ag.status,
+      SUM(km.cost) as cost, SUM(km.clicks) as clicks, SUM(km.impressions) as impressions,
+      SUM(km.conversions) as conversions, SUM(km.conversion_value) as value,
+      CASE WHEN SUM(km.cost) > 0 THEN SUM(km.conversion_value) / SUM(km.cost) ELSE 0 END as roas,
+      COUNT(DISTINCT k.id) as keyword_count
+    FROM ad_groups ag
+    JOIN campaigns c ON c.id = ag.campaign_id
+    LEFT JOIN keywords k ON k.adgroup_id = ag.id
+    LEFT JOIN keyword_metrics km ON km.keyword_id = k.id AND km.date >= date('now', '-' || ? || ' days')
+    WHERE c.status = 'ENABLED'
+    GROUP BY ag.id
+    HAVING cost > 0
+    ORDER BY cost DESC
+    LIMIT 50
+  `).all(period)
+
   const ga4Pages = db.prepare(`
     SELECT page_path, country, AVG(bounce_rate) as bounce_rate, AVG(avg_session_duration) as duration, SUM(sessions) as sessions
     FROM ga4_pages WHERE date >= date('now', '-' || ? || ' days')
@@ -158,6 +176,9 @@ ${JSON.stringify(topKeywords, null, 2)}
 
 ## Verspillende zoektermen (kosten zonder conversie, ${period} dagen)
 ${JSON.stringify(wastedTerms, null, 2)}
+
+## Ad group prestaties (${period} dagen)
+${JSON.stringify(adGroupPerformance, null, 2)}
 
 ## Huidige advertentieteksten per campagne/adgroup
 ${JSON.stringify(adsForAI, null, 2)}
