@@ -223,6 +223,11 @@ function MetricsChart({ data }: { data: DailyMetric[] }) {
 
   return (
     <svg width="100%" viewBox={`0 0 ${w} ${h}`} className="block" style={{ fontFamily: 'inherit' }}>
+      <defs>
+        <clipPath id="chart-area">
+          <rect x={pad.left} y={pad.top} width={cw} height={ch} />
+        </clipPath>
+      </defs>
       {/* Grid lines + left axis labels (cost) */}
       {costTicks.map(v => {
         const y = toY(v, costCeil)
@@ -247,24 +252,26 @@ function MetricsChart({ data }: { data: DailyMetric[] }) {
         )
       })}
 
-      {/* Cost area fill */}
-      <path
-        d={`${smoothPath(costPoints)} L ${costPoints[costPoints.length - 1].x} ${pad.top + ch} L ${costPoints[0].x} ${pad.top + ch} Z`}
-        fill="var(--color-accent)" fillOpacity="0.06" />
+      <g clipPath="url(#chart-area)">
+        {/* Cost area fill */}
+        <path
+          d={`${smoothPath(costPoints)} L ${costPoints[costPoints.length - 1].x} ${pad.top + ch} L ${costPoints[0].x} ${pad.top + ch} Z`}
+          fill="var(--color-accent)" fillOpacity="0.06" />
 
-      {/* Cost line */}
-      <path d={smoothPath(costPoints)} fill="none" stroke="var(--color-accent)" strokeWidth="1.5" />
+        {/* Cost line */}
+        <path d={smoothPath(costPoints)} fill="none" stroke="var(--color-accent)" strokeWidth="1.5" />
 
-      {/* ROAS line */}
-      <path d={smoothPath(roasPoints)} fill="none" stroke="#0f9960" strokeWidth="1.5" strokeDasharray="4 2" />
+        {/* ROAS line */}
+        <path d={smoothPath(roasPoints)} fill="none" stroke="#0f9960" strokeWidth="1.5" strokeDasharray="4 2" />
 
-      {/* Data points */}
-      {costPoints.map((p, i) => (
-        <circle key={`cp-${i}`} cx={p.x} cy={p.y} r="2" fill="var(--color-accent)" />
-      ))}
-      {roasPoints.map((p, i) => (
-        <circle key={`rp-${i}`} cx={p.x} cy={p.y} r="2" fill="#0f9960" />
-      ))}
+        {/* Data points */}
+        {costPoints.map((p, i) => (
+          <circle key={`cp-${i}`} cx={p.x} cy={p.y} r="2" fill="var(--color-accent)" />
+        ))}
+        {roasPoints.map((p, i) => (
+          <circle key={`rp-${i}`} cx={p.x} cy={p.y} r="2" fill="#0f9960" />
+        ))}
+      </g>
 
       {/* X-axis labels */}
       {xLabels.map(d => {
