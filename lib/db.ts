@@ -138,6 +138,21 @@ function initSchema(db: Database.Database) {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS product_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL,
+      product_title TEXT NOT NULL,
+      product_id TEXT,
+      date TEXT NOT NULL,
+      cost REAL NOT NULL DEFAULT 0,
+      clicks INTEGER NOT NULL DEFAULT 0,
+      impressions INTEGER NOT NULL DEFAULT 0,
+      conversions REAL NOT NULL DEFAULT 0,
+      conversion_value REAL NOT NULL DEFAULT 0,
+      FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
+      UNIQUE(campaign_id, product_id, date)
+    );
+
     CREATE TABLE IF NOT EXISTS ga4_pages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       page_path TEXT NOT NULL,

@@ -477,3 +477,55 @@ export async function syncAdMetrics(dateRange: string = 'LAST_30_DAYS') {
 
   log('info', 'google-ads', `${rows.length - skipped} ad metric-rijen gesynchroniseerd${skipped ? ` (${skipped} overgeslagen)` : ''}`)
 }
+
+export async function syncShoppingPerformance(dateRange: string = 'LAST_30_DAYS') {
+  const customer = getClient()
+  const db = getDb()
+
+  const rows = await customer.query(`
+    SELECT
+      campaign.id,
+      segments.product_title,
+      segments.product_item_id,
+      metrics.cost_micros,
+      metrics.clicks,
+      metrics.impressions,
+      metrics.conversions,
+      metrics.conversions_value,
+      segments.date
+    FROM shopping_performance_view
+    WHERE segments.date DURING ${dateRange}
+  `)
+
+  const findCampaign = db.prepare('SELECT id FROM campaigns WHERE google_campaign_id = ?')
+  const stmt = db.prepare(`
+    INSERT INTO product_metrics (campaign_id, product_title, product_id, date, cost, clicks, impressions, conversions, conversion_value)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(campaign_id, product_id, date) DO UPDATE SET
+      product_title = excluded.product_title,
+      cost = excluded.cost, clicks = excluded.clicks, impressions = excluded.impressions,
+      conversions = excluded.conversions, conversion_value = excluded.conversion_value
+  `)
+
+  let skipped = 0
+  const tx = db.transaction(() => {
+    for (const row of rows) {
+      const camp = findCampaign.get(String(row.campaign?.id)) as { id: number } | undefined
+      if (!camp) { skipped++; continue }
+      stmt.run(
+        camp.id,
+        row.segments?.product_title || 'Onbekend product',
+        row.segments?.product_item_id || '',
+        row.segments?.date,
+        Number(row.metrics?.cost_micros || 0) / 1_000_000,
+        Number(row.metrics?.clicks || 0),
+        Number(row.metrics?.impressions || 0),
+        Number(row.metrics?.conversions || 0),
+        Number(row.metrics?.conversions_value || 0)
+      )
+    }
+  })
+  tx()
+
+  log('info', 'google-ads', `${rows.length - skipped} shopping product-rijen gesynchroniseerd${skipped ? ` (${skipped} overgeslagen)` : ''}`)
+}
