@@ -37,6 +37,11 @@ interface AdGroup {
   name: string
   status: string
   keyword_count: number
+  total_cost: number
+  total_clicks: number
+  total_conversions: number
+  total_value: number
+  roas: number
 }
 
 interface Keyword {
@@ -293,12 +298,16 @@ export default function CampaignDetailPage() {
                   <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2">Naam</th>
                   <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2">Status</th>
                   <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Zoekwoorden</th>
+                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Kosten (7d)</th>
+                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Klikken</th>
+                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Conv.</th>
+                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">ROAS</th>
                 </tr>
               </thead>
               <tbody>
-                {adGroups.map(ag => (
-                  <tr key={ag.id} className="border-b border-border-subtle last:border-0 hover:bg-surface-hover transition-colors">
-                    <td className="px-4 py-2 text-[13px] text-text-primary">{ag.name}</td>
+                {adGroups.map((ag, i) => (
+                  <tr key={ag.id} className={`border-b border-border-subtle last:border-0 transition-colors ${i % 2 === 0 ? 'bg-surface-1' : 'bg-surface-0/50'} hover:bg-surface-hover`}>
+                    <td className="px-4 py-2 text-[13px] font-medium text-text-primary">{ag.name}</td>
                     <td className="px-4 py-2">
                       <span className="flex items-center gap-1.5 text-[12px] text-text-secondary">
                         <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: statusDotColor(ag.status) }} />
@@ -306,6 +315,12 @@ export default function CampaignDetailPage() {
                       </span>
                     </td>
                     <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{ag.keyword_count}</td>
+                    <td className="px-4 py-2 text-[13px] text-right font-medium text-text-primary">{formatCurrency(ag.total_cost || 0)}</td>
+                    <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{ag.total_clicks || 0}</td>
+                    <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{Math.round(ag.total_conversions || 0)}</td>
+                    <td className={`px-4 py-2 text-[13px] text-right font-semibold ${(ag.roas || 0) >= 3 ? 'text-success' : (ag.roas || 0) >= 1 ? 'text-warning' : 'text-danger'}`}>
+                      {formatRoas(ag.roas || 0)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
