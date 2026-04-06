@@ -42,17 +42,17 @@ export async function GET(req: NextRequest) {
     )
     .get() as TokenRow
 
-  // Per-model breakdown
+  // Per-model breakdown (coalesce NULL model to sonnet so they group together)
   const byModelTotal = db
-    .prepare('SELECT model, SUM(input_tokens) as input, SUM(output_tokens) as output FROM token_usage GROUP BY model')
+    .prepare("SELECT COALESCE(model, 'claude-sonnet-4-6') as model, SUM(input_tokens) as input, SUM(output_tokens) as output FROM token_usage GROUP BY COALESCE(model, 'claude-sonnet-4-6')")
     .all() as TokenRow[]
 
   const byModel7d = db
-    .prepare("SELECT model, SUM(input_tokens) as input, SUM(output_tokens) as output FROM token_usage WHERE created_at >= date('now', '-7 days') GROUP BY model")
+    .prepare("SELECT COALESCE(model, 'claude-sonnet-4-6') as model, SUM(input_tokens) as input, SUM(output_tokens) as output FROM token_usage WHERE created_at >= date('now', '-7 days') GROUP BY COALESCE(model, 'claude-sonnet-4-6')")
     .all() as TokenRow[]
 
   const byModel30d = db
-    .prepare("SELECT model, SUM(input_tokens) as input, SUM(output_tokens) as output FROM token_usage WHERE created_at >= date('now', '-30 days') GROUP BY model")
+    .prepare("SELECT COALESCE(model, 'claude-sonnet-4-6') as model, SUM(input_tokens) as input, SUM(output_tokens) as output FROM token_usage WHERE created_at >= date('now', '-30 days') GROUP BY COALESCE(model, 'claude-sonnet-4-6')")
     .all() as TokenRow[]
 
   function formatModelBreakdown(rows: TokenRow[]) {
