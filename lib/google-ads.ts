@@ -70,7 +70,6 @@ export async function syncCampaigns() {
       campaign.name,
       campaign.advertising_channel_type,
       campaign.status,
-      campaign.start_date,
       campaign_budget.amount_micros,
       campaign.bidding_strategy_type,
       campaign.target_roas.target_roas
@@ -99,8 +98,7 @@ export async function syncCampaigns() {
       const rawStatus = String(c.status || 'ENABLED')
       const mappedStatus = CAMPAIGN_STATUS_MAP[rawStatus] || rawStatus
       const country = deriveCountry(c.name || '')
-      // Google Ads returns start_date as "yyyy-MM-dd" string
-      const startDate = (c as Record<string, unknown>)['start_date'] as string | null || null
+      const startDate = null
       stmt.run(
         String(c.id), c.name,
         mappedType,

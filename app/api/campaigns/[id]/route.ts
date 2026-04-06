@@ -7,7 +7,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params
   const db = getDb()
 
-  const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(id)
+  const campaign = db.prepare(`
+    SELECT c.*,
+      (SELECT MIN(dm.date) FROM daily_metrics dm WHERE dm.campaign_id = c.id) as start_date
+    FROM campaigns c WHERE c.id = ?
+  `).get(id)
   if (!campaign) return NextResponse.json({ error: 'Niet gevonden' }, { status: 404 })
 
   const metrics = db.prepare(
