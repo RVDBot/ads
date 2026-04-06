@@ -16,5 +16,12 @@ export async function GET(req: NextRequest) {
   if (status) { where += ' AND status = ?'; params.push(status) }
 
   const products = db.prepare(`SELECT * FROM products ${where} ORDER BY title ASC`).all(...params)
+
+  // Log sample merchant_product_id formats for debugging (first 3)
+  if (products.length > 0) {
+    const samples = (products as Array<{ merchant_product_id: string }>).slice(0, 3).map(p => p.merchant_product_id)
+    console.log('[products] Sample merchant_product_ids:', samples)
+  }
+
   return NextResponse.json({ products })
 }

@@ -28,6 +28,12 @@ interface GroupedProduct {
 
 const COUNTRIES = ['NL', 'DE', 'FR', 'ES', 'IT', 'EN']
 
+// Map raw country codes from DB to display country columns
+const COUNTRY_NORMALIZE: Record<string, string> = {
+  NL: 'NL', DE: 'DE', FR: 'FR', ES: 'ES', IT: 'IT',
+  COM: 'EN', EN: 'EN', GB: 'EN', US: 'EN',
+}
+
 const marginColors: Record<string, string> = {
   high: 'bg-success-subtle text-success',
   medium: 'bg-accent-subtle text-accent',
@@ -41,12 +47,12 @@ const statusDot: Record<string, string> = {
 }
 
 // Extract base product ID from merchant_product_id
-// Format: "online:nl:NL:12345" or "shopify_NL_12345_67890" → extract numeric core
+// Format: "online:nl:NL:12345" or "shopify_NL_12345_67890"
 function baseProductId(merchantId: string): string {
-  // Try "online:xx:XX:ID" format
+  // "online:xx:XX:ID" → take everything after 3rd colon
   const colonParts = merchantId.split(':')
   if (colonParts.length >= 4) return colonParts.slice(3).join(':')
-  // Try "shopify_XX_ID_VARIANT" → drop prefix and country
+  // "shopify_XX_ID_VARIANT" → take ID_VARIANT (drop prefix + country)
   const underParts = merchantId.split('_')
   if (underParts.length >= 3) return underParts.slice(2).join('_')
   return merchantId
@@ -68,11 +74,11 @@ function groupProducts(products: Product[]): GroupedProduct[] {
       })
     }
     const group = map.get(key)!
-    const cc = (p.country || '').toUpperCase()
+    const rawCC = (p.country || '').toUpperCase()
+    const cc = COUNTRY_NORMALIZE[rawCC] || rawCC
     if (cc) {
       group.countries[cc] = { status: p.status, availability: p.availability }
     }
-    // Use first non-null values
     if (!group.price && p.price) group.price = p.price
     if (!group.margin_label && p.margin_label) group.margin_label = p.margin_label
     if (!group.availability && p.availability) group.availability = p.availability
@@ -191,18 +197,18 @@ export default function ProductsPage() {
                     } hover:bg-surface-hover`}>
                     <td className="px-4 py-2.5 text-[13px] text-text-primary max-w-[300px] truncate" title={g.title}>{g.title}</td>
                     <td className="px-4 py-2.5 text-[13px] text-right font-medium text-text-primary">
-                      {g.price ? formatCurrency(g.price, g.currency) : '\u2014'}
+                      {g.price ? formatCurrency(g.price, g.currency) : '—'}
                     </td>
                     <td className="px-4 py-2.5">
                       {g.margin_label ? (
                         <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${marginColors[g.margin_label] || 'bg-surface-3 text-text-tertiary'}`}>
                           {g.margin_label}
                         </span>
-                      ) : <span className="text-[11px] text-text-tertiary">\u2014</span>}
+                      ) : <span className="text-[11px] text-text-tertiary">—</span>}
                     </td>
                     {COUNTRIES.map(c => {
                       const entry = g.countries[c]
-                      if (!entry) return <td key={c} className="text-center px-2 py-2.5"><span className="text-text-tertiary/30">\u2014</span></td>
+                      if (!entry) return <td key={c} className="text-center px-2 py-2.5"><span className="text-text-tertiary/30">—</span></td>
                       return (
                         <td key={c} className="text-center px-2 py-2.5">
                           <span
@@ -213,7 +219,7 @@ export default function ProductsPage() {
                         </td>
                       )
                     })}
-                    <td className="px-4 py-2.5 text-[13px] text-text-secondary">{g.availability || '\u2014'}</td>
+                    <td className="px-4 py-2.5 text-[13px] text-text-secondary">{g.availability || '—'}</td>
                   </tr>
                 ))}
               </tbody>
