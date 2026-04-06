@@ -17,6 +17,7 @@ interface Campaign {
   daily_budget: number
   bid_strategy: string | null
   target_roas: number | null
+  start_date: string | null
 }
 
 interface DailyMetric {
@@ -245,6 +246,9 @@ export default function CampaignDetailPage() {
             <span className="text-[11px] text-text-tertiary">{campaign.type}</span>
             {campaign.target_countries && (
               <span className="text-[11px] text-text-secondary">{campaign.target_countries}</span>
+            )}
+            {campaign.start_date && (
+              <span className="text-[11px] text-text-tertiary">Gestart {new Date(campaign.start_date).toLocaleDateString('nl-NL')}</span>
             )}
             <button onClick={() => openChat('campaign', campaign.id, campaign.name)}
               className="px-3 py-1.5 bg-accent/10 text-accent text-[12px] font-semibold rounded-lg hover:bg-accent/20 transition-colors shrink-0">

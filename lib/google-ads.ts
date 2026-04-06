@@ -70,6 +70,7 @@ export async function syncCampaigns() {
       campaign.name,
       campaign.advertising_channel_type,
       campaign.status,
+      campaign.start_date,
       campaign_budget.amount_micros,
       campaign.bidding_strategy_type,
       campaign.target_roas.target_roas
@@ -78,13 +79,14 @@ export async function syncCampaigns() {
   `)
 
   const stmt = db.prepare(`
-    INSERT INTO campaigns (google_campaign_id, name, type, status, country, daily_budget, bid_strategy, target_roas, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    INSERT INTO campaigns (google_campaign_id, name, type, status, country, daily_budget, bid_strategy, target_roas, start_date, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(google_campaign_id) DO UPDATE SET
       name = excluded.name, type = excluded.type, status = excluded.status,
       country = COALESCE(excluded.country, campaigns.country),
       daily_budget = excluded.daily_budget, bid_strategy = excluded.bid_strategy,
-      target_roas = excluded.target_roas, updated_at = CURRENT_TIMESTAMP
+      target_roas = excluded.target_roas, start_date = COALESCE(excluded.start_date, campaigns.start_date),
+      updated_at = CURRENT_TIMESTAMP
   `)
 
   const tx = db.transaction(() => {
@@ -97,6 +99,8 @@ export async function syncCampaigns() {
       const rawStatus = String(c.status || 'ENABLED')
       const mappedStatus = CAMPAIGN_STATUS_MAP[rawStatus] || rawStatus
       const country = deriveCountry(c.name || '')
+      // Google Ads returns start_date as "yyyy-MM-dd" string
+      const startDate = (c as Record<string, unknown>)['start_date'] as string | null || null
       stmt.run(
         String(c.id), c.name,
         mappedType,
@@ -104,7 +108,8 @@ export async function syncCampaigns() {
         country,
         budget,
         String(c.bidding_strategy_type || ''),
-        c.target_roas?.target_roas || null
+        c.target_roas?.target_roas || null,
+        startDate
       )
     }
   })

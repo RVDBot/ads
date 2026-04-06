@@ -38,6 +38,7 @@ function initSchema(db: Database.Database) {
       daily_budget REAL,
       bid_strategy TEXT,
       target_roas REAL,
+      start_date TEXT,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -239,6 +240,10 @@ function initSchema(db: Database.Database) {
   const cols = db.prepare("PRAGMA table_info(campaigns)").all() as Array<{ name: string }>
   if (!cols.some(c => c.name === 'target_countries')) {
     db.exec('ALTER TABLE campaigns ADD COLUMN target_countries TEXT')
+  }
+
+  if (!cols.some(c => c.name === 'start_date')) {
+    db.exec('ALTER TABLE campaigns ADD COLUMN start_date TEXT')
   }
 
   const tuCols = db.prepare("PRAGMA table_info(token_usage)").all() as Array<{ name: string }>
