@@ -48,5 +48,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     GROUP BY search_term ORDER BY cost DESC LIMIT 50
   `).all(id)
 
-  return NextResponse.json({ campaign, metrics, adGroups, keywords, searchTerms })
+  const products = db.prepare(`
+    SELECT product_title, product_id,
+      SUM(cost) as total_cost, SUM(clicks) as total_clicks, SUM(impressions) as total_impressions,
+      SUM(conversions) as total_conversions, SUM(conversion_value) as total_value,
+      CASE WHEN SUM(cost) > 0 THEN SUM(conversion_value) / SUM(cost) ELSE 0 END as roas
+    FROM product_metrics WHERE campaign_id = ? AND date >= date('now', '-30 days')
+    GROUP BY product_id ORDER BY total_cost DESC LIMIT 50
+  `).all(id)
+
+  return NextResponse.json({ campaign, metrics, adGroups, keywords, searchTerms, products })
 }

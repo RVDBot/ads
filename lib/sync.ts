@@ -24,7 +24,7 @@ export async function runFullSync(trigger: 'manual' | 'scheduled' = 'manual'): P
 
   // 1. Google Ads
   try {
-    const { syncCampaigns, syncDailyMetrics, syncAdGroups, syncKeywords, syncKeywordMetrics, syncSearchTerms, syncAds, syncAdMetrics } = await import('./google-ads')
+    const { syncCampaigns, syncDailyMetrics, syncAdGroups, syncKeywords, syncKeywordMetrics, syncSearchTerms, syncAds, syncAdMetrics, syncShoppingPerformance } = await import('./google-ads')
     await syncCampaigns()
     await syncDailyMetrics('LAST_30_DAYS')
     await syncAdGroups()
@@ -33,6 +33,7 @@ export async function runFullSync(trigger: 'manual' | 'scheduled' = 'manual'): P
     await syncSearchTerms('LAST_30_DAYS')
     await syncAds()
     await syncAdMetrics('LAST_30_DAYS')
+    await syncShoppingPerformance('LAST_30_DAYS')
     log('info', 'google-ads', 'Google Ads sync voltooid')
   } catch (e) {
     const msg = errorToString(e)

@@ -65,6 +65,17 @@ interface SearchTerm {
   value: number
 }
 
+interface ProductMetric {
+  product_title: string
+  product_id: string
+  total_cost: number
+  total_clicks: number
+  total_impressions: number
+  total_conversions: number
+  total_value: number
+  roas: number
+}
+
 const MATCH_TYPE_MAP: Record<string, string> = {
   '2': 'EXACT', '3': 'PHRASE', '4': 'BROAD',
   EXACT: 'EXACT', PHRASE: 'PHRASE', BROAD: 'BROAD',
@@ -178,6 +189,7 @@ export default function CampaignDetailPage() {
   const [adGroups, setAdGroups] = useState<AdGroup[]>([])
   const [keywords, setKeywords] = useState<Keyword[]>([])
   const [searchTerms, setSearchTerms] = useState<SearchTerm[]>([])
+  const [products, setProducts] = useState<ProductMetric[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -190,6 +202,7 @@ export default function CampaignDetailPage() {
         setAdGroups(d.adGroups || [])
         setKeywords(d.keywords || [])
         setSearchTerms(d.searchTerms || [])
+        setProducts(d.products || [])
         setLoading(false)
       })
       .catch(() => setLoading(false))
@@ -368,6 +381,41 @@ export default function CampaignDetailPage() {
                     </tr>
                   )
                 })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Products (Shopping/PMAX) */}
+        {products.length > 0 && (
+          <div className="bg-surface-1 border border-border-subtle rounded-2xl overflow-hidden mb-5">
+            <div className="px-4 py-3 border-b border-border-subtle">
+              <span className="text-[13px] font-semibold text-text-primary">Producten ({products.length})</span>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border-subtle">
+                  <th className="text-left text-[11px] font-medium text-text-tertiary px-4 py-2">Product</th>
+                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Kosten (30d)</th>
+                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Klikken</th>
+                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Conv.</th>
+                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">Waarde</th>
+                  <th className="text-right text-[11px] font-medium text-text-tertiary px-4 py-2">ROAS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {products.map((p, i) => (
+                  <tr key={p.product_id || i} className={`border-b border-border-subtle last:border-0 transition-colors ${i % 2 === 0 ? 'bg-surface-1' : 'bg-surface-0/50'} hover:bg-surface-hover`}>
+                    <td className="px-4 py-2 text-[13px] font-medium text-text-primary max-w-[250px] truncate" title={p.product_title}>{p.product_title}</td>
+                    <td className="px-4 py-2 text-[13px] text-right font-medium text-text-primary">{formatCurrency(p.total_cost || 0)}</td>
+                    <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{p.total_clicks || 0}</td>
+                    <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{Math.round(p.total_conversions || 0)}</td>
+                    <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{formatCurrency(p.total_value || 0)}</td>
+                    <td className={`px-4 py-2 text-[13px] text-right font-semibold ${(p.roas || 0) >= 3 ? 'text-success' : (p.roas || 0) >= 1 ? 'text-warning' : 'text-danger'}`}>
+                      {formatRoas(p.roas || 0)}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
