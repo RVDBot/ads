@@ -40,11 +40,23 @@ const statusDot: Record<string, string> = {
   pending: '#d97706',
 }
 
+// Extract base product ID from merchant_product_id
+// Format: "online:nl:NL:12345" or "shopify_NL_12345_67890" → extract numeric core
+function baseProductId(merchantId: string): string {
+  // Try "online:xx:XX:ID" format
+  const colonParts = merchantId.split(':')
+  if (colonParts.length >= 4) return colonParts.slice(3).join(':')
+  // Try "shopify_XX_ID_VARIANT" → drop prefix and country
+  const underParts = merchantId.split('_')
+  if (underParts.length >= 3) return underParts.slice(2).join('_')
+  return merchantId
+}
+
 function groupProducts(products: Product[]): GroupedProduct[] {
   const map = new Map<string, GroupedProduct>()
 
   for (const p of products) {
-    const key = p.title.toLowerCase().trim()
+    const key = baseProductId(p.merchant_product_id)
     if (!map.has(key)) {
       map.set(key, {
         title: p.title,
