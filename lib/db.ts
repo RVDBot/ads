@@ -150,7 +150,7 @@ function initSchema(db: Database.Database) {
       conversions REAL NOT NULL DEFAULT 0,
       conversion_value REAL NOT NULL DEFAULT 0,
       FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
-      UNIQUE(campaign_id, product_id, date)
+      UNIQUE(campaign_id, product_title, date)
     );
 
     CREATE TABLE IF NOT EXISTS ga4_pages (

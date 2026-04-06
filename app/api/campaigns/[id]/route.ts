@@ -54,7 +54,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       SUM(conversions) as total_conversions, SUM(conversion_value) as total_value,
       CASE WHEN SUM(cost) > 0 THEN SUM(conversion_value) / SUM(cost) ELSE 0 END as roas
     FROM product_metrics WHERE campaign_id = ? AND date >= date('now', '-30 days')
-    GROUP BY product_id ORDER BY total_cost DESC LIMIT 50
+    GROUP BY product_title ORDER BY total_cost DESC LIMIT 50
   `).all(id)
 
   return NextResponse.json({ campaign, metrics, adGroups, keywords, searchTerms, products })

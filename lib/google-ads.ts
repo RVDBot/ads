@@ -497,14 +497,40 @@ export async function syncShoppingPerformance(dateRange: string = 'LAST_30_DAYS'
     WHERE segments.date DURING ${dateRange}
   `)
 
+  if (rows.length > 0) {
+    log('info', 'google-ads', `Shopping performance: ${rows.length} rijen ontvangen`, { sampleRow: JSON.stringify(rows[0]).slice(0, 500) })
+  } else {
+    log('warn', 'google-ads', 'Shopping performance: 0 rijen ontvangen van API')
+    return
+  }
+
+  // Drop and recreate to handle schema changes
+  db.exec('DROP TABLE IF EXISTS product_metrics')
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS product_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL,
+      product_title TEXT NOT NULL,
+      product_id TEXT,
+      date TEXT NOT NULL,
+      cost REAL NOT NULL DEFAULT 0,
+      clicks INTEGER NOT NULL DEFAULT 0,
+      impressions INTEGER NOT NULL DEFAULT 0,
+      conversions REAL NOT NULL DEFAULT 0,
+      conversion_value REAL NOT NULL DEFAULT 0,
+      FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
+      UNIQUE(campaign_id, product_title, date)
+    )
+  `)
+
   const findCampaign = db.prepare('SELECT id FROM campaigns WHERE google_campaign_id = ?')
   const stmt = db.prepare(`
     INSERT INTO product_metrics (campaign_id, product_title, product_id, date, cost, clicks, impressions, conversions, conversion_value)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(campaign_id, product_id, date) DO UPDATE SET
-      product_title = excluded.product_title,
-      cost = excluded.cost, clicks = excluded.clicks, impressions = excluded.impressions,
-      conversions = excluded.conversions, conversion_value = excluded.conversion_value
+    ON CONFLICT(campaign_id, product_title, date) DO UPDATE SET
+      product_id = excluded.product_id,
+      cost = cost + excluded.cost, clicks = clicks + excluded.clicks, impressions = impressions + excluded.impressions,
+      conversions = conversions + excluded.conversions, conversion_value = conversion_value + excluded.conversion_value
   `)
 
   let skipped = 0
