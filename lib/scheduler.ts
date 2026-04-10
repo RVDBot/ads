@@ -33,6 +33,14 @@ export async function measureSuggestionResults(): Promise<void> {
   }
 }
 
+function msUntilNext(hour: number, minute = 0): number {
+  const now = new Date()
+  const target = new Date(now)
+  target.setHours(hour, minute, 0, 0)
+  if (target <= now) target.setDate(target.getDate() + 1)
+  return target.getTime() - now.getTime()
+}
+
 export function scheduleSyncs() {
   const freq = getSetting('sync_frequency')
   if (!freq || freq === 'manual') {
@@ -40,9 +48,7 @@ export function scheduleSyncs() {
     return
   }
 
-  const intervalMs = freq === '4x_day' ? 6 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000
-
-  async function tick() {
+  async function runScheduledSync() {
     try {
       const { runFullSync } = await import('./sync')
       await runFullSync('scheduled')
@@ -71,12 +77,27 @@ export function scheduleSyncs() {
     } catch (e) {
       log('error', 'sync', 'Scheduled sync mislukt', { error: e instanceof Error ? e.message : String(e) })
     }
-    syncTimer = setTimeout(tick, intervalMs)
   }
 
-  // Start first sync after a short delay
-  syncTimer = setTimeout(tick, 60_000)
-  log('info', 'system', `Sync scheduler gestart: elke ${intervalMs / 3600000}u`)
+  if (freq === '4x_day') {
+    // Run every 6 hours starting from a short delay
+    const intervalMs = 6 * 60 * 60 * 1000
+    function tick4x() {
+      runScheduledSync().finally(() => { syncTimer = setTimeout(tick4x, intervalMs) })
+    }
+    syncTimer = setTimeout(tick4x, 60_000)
+    log('info', 'system', 'Sync scheduler gestart: elke 6u')
+  } else {
+    // Daily sync at 03:00
+    function scheduleNext() {
+      const ms = msUntilNext(3, 0)
+      log('info', 'system', `Volgende sync gepland om 03:00 (over ${Math.round(ms / 60000)} min)`)
+      syncTimer = setTimeout(() => {
+        runScheduledSync().finally(scheduleNext)
+      }, ms)
+    }
+    scheduleNext()
+  }
 }
 
 export function stopScheduler() {
