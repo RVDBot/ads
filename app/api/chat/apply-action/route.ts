@@ -248,59 +248,48 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
     }
 
     case 'new_campaign': {
-      const budgetResult = await customer.mutateResources([{
-        entity: 'campaign_budget' as const,
-        operation: 'create' as const,
-        resource: {
-          name: `Budget - ${details.name as string}`,
-          amount_micros: Math.round(Number(details.daily_budget || 10) * 1_000_000),
-          delivery_method: 'STANDARD',
-        },
-      }])
+      const campaignName = details.name as string
+      const budgetName = `Budget - ${campaignName} ${Date.now()}`
 
-      log('info', 'google-ads', 'Budget mutate result', { result: JSON.stringify(budgetResult).slice(0, 1000) })
-
-      // google-ads-api returns different response shapes — try multiple paths
-      const br = budgetResult as any
-      const budgetResourceName =
-        br?.results?.[0]?.resource_name ||
-        br?.mutate_operation_responses?.[0]?.campaign_budget_result?.resource_name ||
-        br?.[0]?.campaign_budget?.resource_name ||
-        br?.[0]?.resource_name ||
-        // If the result itself is a resource name string
-        (typeof br === 'string' && br.includes('campaignBudgets') ? br : null)
+      // First check if a budget already exists from a previous failed attempt
+      const existingBudgets = await customer.query(`
+        SELECT campaign_budget.resource_name
+        FROM campaign_budget
+        WHERE campaign_budget.name LIKE 'Budget - ${campaignName.replace(/'/g, "\\'")}%'
+        ORDER BY campaign_budget.id DESC
+        LIMIT 1
+      `)
+      let budgetResourceName = (existingBudgets[0] as any)?.campaign_budget?.resource_name
 
       if (!budgetResourceName) {
-        // Last resort: query for the budget we just created
-        const customerId = getSetting('google_ads_customer_id')
-        const budgets = await customer.query(`
-          SELECT campaign_budget.resource_name, campaign_budget.name
-          FROM campaign_budget
-          WHERE campaign_budget.name = 'Budget - ${(details.name as string).replace(/'/g, "\\'")}'
-          ORDER BY campaign_budget.id DESC
-          LIMIT 1
-        `)
-        const fallbackName = (budgets[0] as any)?.campaign_budget?.resource_name
-        if (!fallbackName) throw new Error('Budget aanmaken mislukt — kon resource_name niet vinden')
-
-        return customer.mutateResources([{
-          entity: 'campaign' as const,
+        // Create new budget
+        await customer.mutateResources([{
+          entity: 'campaign_budget' as const,
           operation: 'create' as const,
           resource: {
-            name: details.name as string,
-            advertising_channel_type: (details.type as string) || 'SEARCH',
-            status: 'PAUSED',
-            campaign_budget: fallbackName,
-            manual_cpc: {},
+            name: budgetName,
+            amount_micros: Math.round(Number(details.daily_budget || 10) * 1_000_000),
+            delivery_method: 'STANDARD',
           },
         }])
+
+        // Query for the just-created budget
+        const budgets = await customer.query(`
+          SELECT campaign_budget.resource_name
+          FROM campaign_budget
+          WHERE campaign_budget.name = '${budgetName.replace(/'/g, "\\'")}'
+          LIMIT 1
+        `)
+        budgetResourceName = (budgets[0] as any)?.campaign_budget?.resource_name
       }
+
+      if (!budgetResourceName) throw new Error('Budget aanmaken mislukt — kon resource_name niet vinden')
 
       return customer.mutateResources([{
         entity: 'campaign' as const,
         operation: 'create' as const,
         resource: {
-          name: details.name as string,
+          name: campaignName,
           advertising_channel_type: (details.type as string) || 'SEARCH',
           status: 'PAUSED',
           campaign_budget: budgetResourceName,
@@ -460,7 +449,7 @@ export async function POST(req: NextRequest) {
       message_id,
       action_index,
       type: action.type,
-      raw_error: JSON.stringify(e, Object.getOwnPropertyNames(e instanceof Error ? e : {})).slice(0, 1000),
+      full_error: errorMessage,
     })
     return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
