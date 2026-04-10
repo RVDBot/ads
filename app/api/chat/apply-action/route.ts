@@ -247,6 +247,32 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
       })))
     }
 
+    case 'new_campaign': {
+      const budgetResult = await customer.mutateResources([{
+        entity: 'campaign_budget' as const,
+        operation: 'create' as const,
+        resource: {
+          name: `Budget - ${details.name as string}`,
+          amount_micros: Math.round(Number(details.daily_budget || 10) * 1_000_000),
+          delivery_method: 'STANDARD',
+        },
+      }])
+      const budgetResourceName = (budgetResult as any)?.results?.[0]?.resource_name
+      if (!budgetResourceName) throw new Error('Budget aanmaken mislukt')
+
+      return customer.mutateResources([{
+        entity: 'campaign' as const,
+        operation: 'create' as const,
+        resource: {
+          name: details.name as string,
+          advertising_channel_type: (details.type as string) || 'SEARCH',
+          status: 'PAUSED',
+          campaign_budget: budgetResourceName,
+          manual_cpc: {},
+        },
+      }])
+    }
+
     default:
       throw new Error(`Onbekend actie-type: ${actionType}`)
   }
