@@ -293,12 +293,18 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         advertising_channel_type: channelType,
         status: 'PAUSED',
         campaign_budget: budgetResourceName,
-        network_settings: {
-          target_google_search: !isShopping,
-          target_search_network: !isShopping,
-          target_content_network: isShopping,
-        },
-        contains_eu_political_advertising: false,
+      }
+
+      // EU political advertising disclosure (required)
+      campaignResource.contains_eu_political_advertising = 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING'
+
+      // Shopping uses Google Shopping network implicitly — no network_settings needed
+      if (!isShopping) {
+        campaignResource.network_settings = {
+          target_google_search: true,
+          target_search_network: true,
+          target_content_network: false,
+        }
       }
 
       // Shopping campaigns require shopping_setting with merchant_id
