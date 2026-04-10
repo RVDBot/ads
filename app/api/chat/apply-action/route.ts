@@ -257,8 +257,44 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
           delivery_method: 'STANDARD',
         },
       }])
-      const budgetResourceName = (budgetResult as any)?.results?.[0]?.resource_name
-      if (!budgetResourceName) throw new Error('Budget aanmaken mislukt')
+
+      log('info', 'google-ads', 'Budget mutate result', { result: JSON.stringify(budgetResult).slice(0, 1000) })
+
+      // google-ads-api returns different response shapes — try multiple paths
+      const br = budgetResult as any
+      const budgetResourceName =
+        br?.results?.[0]?.resource_name ||
+        br?.mutate_operation_responses?.[0]?.campaign_budget_result?.resource_name ||
+        br?.[0]?.campaign_budget?.resource_name ||
+        br?.[0]?.resource_name ||
+        // If the result itself is a resource name string
+        (typeof br === 'string' && br.includes('campaignBudgets') ? br : null)
+
+      if (!budgetResourceName) {
+        // Last resort: query for the budget we just created
+        const customerId = getSetting('google_ads_customer_id')
+        const budgets = await customer.query(`
+          SELECT campaign_budget.resource_name, campaign_budget.name
+          FROM campaign_budget
+          WHERE campaign_budget.name = 'Budget - ${(details.name as string).replace(/'/g, "\\'")}'
+          ORDER BY campaign_budget.id DESC
+          LIMIT 1
+        `)
+        const fallbackName = (budgets[0] as any)?.campaign_budget?.resource_name
+        if (!fallbackName) throw new Error('Budget aanmaken mislukt — kon resource_name niet vinden')
+
+        return customer.mutateResources([{
+          entity: 'campaign' as const,
+          operation: 'create' as const,
+          resource: {
+            name: details.name as string,
+            advertising_channel_type: (details.type as string) || 'SEARCH',
+            status: 'PAUSED',
+            campaign_budget: fallbackName,
+            manual_cpc: {},
+          },
+        }])
+      }
 
       return customer.mutateResources([{
         entity: 'campaign' as const,
