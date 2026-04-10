@@ -75,6 +75,26 @@ function FormattedText({ text }: { text: string }) {
 }
 
 export default function ChatMessage({ id, role, content, proposedActions, onActionApplied }: ChatMessageProps) {
+  const [localActions, setLocalActions] = useState<ProposedAction[] | undefined>(proposedActions)
+
+  // Sync with props when they change (e.g. after refreshMessages)
+  const actionsKey = JSON.stringify(proposedActions)
+  const [prevKey, setPrevKey] = useState(actionsKey)
+  if (actionsKey !== prevKey) {
+    setPrevKey(actionsKey)
+    setLocalActions(proposedActions)
+  }
+
+  function handleLocalUpdate(index: number, status: string) {
+    setLocalActions(prev => {
+      if (!prev) return prev
+      const updated = [...prev]
+      updated[index] = { ...updated[index], status }
+      return updated
+    })
+    onActionApplied?.()
+  }
+
   if (role === 'user') {
     return (
       <div className="flex justify-end">
@@ -91,15 +111,15 @@ export default function ChatMessage({ id, role, content, proposedActions, onActi
         <div className="bg-surface-1 border border-border-subtle text-[13px] text-text-primary px-4 py-2.5 rounded-2xl rounded-bl-md whitespace-pre-wrap">
           <FormattedText text={content} />
         </div>
-        {proposedActions && proposedActions.length > 0 && (
+        {localActions && localActions.length > 0 && (
           <div className="flex flex-col gap-2">
-            {proposedActions.map((action, index) => (
+            {localActions.map((action, index) => (
               <ActionCard
                 key={index}
                 action={action}
                 messageId={id}
                 actionIndex={index}
-                onActionApplied={onActionApplied}
+                onLocalUpdate={(status) => handleLocalUpdate(index, status)}
               />
             ))}
           </div>
@@ -109,11 +129,11 @@ export default function ChatMessage({ id, role, content, proposedActions, onActi
   )
 }
 
-function ActionCard({ action, messageId, actionIndex, onActionApplied }: {
+function ActionCard({ action, messageId, actionIndex, onLocalUpdate }: {
   action: ProposedAction
   messageId?: number
   actionIndex: number
-  onActionApplied?: () => void
+  onLocalUpdate?: (status: string) => void
 }) {
   const [loading, setLoading] = useState('')
 
@@ -121,12 +141,15 @@ function ActionCard({ action, messageId, actionIndex, onActionApplied }: {
     if (!messageId) return
     setLoading('apply')
     try {
-      await apiFetch('/api/chat/apply-action', {
+      const res = await apiFetch('/api/chat/apply-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message_id: messageId, action_index: actionIndex }),
       })
-      onActionApplied?.()
+      const data = await res.json()
+      onLocalUpdate?.(data.success ? 'applied' : 'failed')
+    } catch {
+      onLocalUpdate?.('failed')
     } finally {
       setLoading('')
     }
@@ -141,7 +164,9 @@ function ActionCard({ action, messageId, actionIndex, onActionApplied }: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message_id: messageId, action_index: actionIndex, dismiss: true }),
       })
-      onActionApplied?.()
+      onLocalUpdate?.('dismissed')
+    } catch {
+      // ignore
     } finally {
       setLoading('')
     }
