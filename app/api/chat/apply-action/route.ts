@@ -291,7 +291,7 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
       const campaignResource: Record<string, unknown> = {
         name: campaignName,
         advertising_channel_type: channelType,
-        status: 'PAUSED',
+        status: 'ENABLED',
         campaign_budget: budgetResourceName,
       }
 
