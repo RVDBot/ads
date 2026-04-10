@@ -286,16 +286,39 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
 
       if (!budgetResourceName) throw new Error('Budget aanmaken mislukt — kon resource_name niet vinden')
 
+      const channelType = (details.type as string) || 'SEARCH'
+      const campaignResource: Record<string, unknown> = {
+        name: campaignName,
+        advertising_channel_type: channelType,
+        status: 'PAUSED',
+        campaign_budget: budgetResourceName,
+      }
+
+      // Shopping campaigns require shopping_setting with merchant_id
+      if (channelType === 'SHOPPING') {
+        const country = ((details.country as string) || 'nl').toLowerCase()
+        const merchantId = getSetting(`merchant_center_id_${country}`) || getSetting('merchant_center_id')
+        if (!merchantId) throw new Error(`Geen Merchant Center ID gevonden voor land: ${country}`)
+        campaignResource.shopping_setting = {
+          merchant_id: Number(merchantId),
+          sales_country: country.toUpperCase(),
+        }
+        // Use maximize_conversion_value for ROAS-based shopping campaigns
+        if (details.target_roas) {
+          campaignResource.maximize_conversion_value = {
+            target_roas: Number(details.target_roas),
+          }
+        } else {
+          campaignResource.manual_cpc = {}
+        }
+      } else {
+        campaignResource.manual_cpc = {}
+      }
+
       return customer.mutateResources([{
         entity: 'campaign' as const,
         operation: 'create' as const,
-        resource: {
-          name: campaignName,
-          advertising_channel_type: (details.type as string) || 'SEARCH',
-          status: 'PAUSED',
-          campaign_budget: budgetResourceName,
-          manual_cpc: {},
-        },
+        resource: campaignResource,
       }])
     }
 
