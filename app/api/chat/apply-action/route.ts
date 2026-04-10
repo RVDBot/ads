@@ -287,26 +287,29 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
       if (!budgetResourceName) throw new Error('Budget aanmaken mislukt — kon resource_name niet vinden')
 
       const channelType = (details.type as string) || 'SEARCH'
+      const isShopping = channelType === 'SHOPPING'
       const campaignResource: Record<string, unknown> = {
         name: campaignName,
         advertising_channel_type: channelType,
         status: 'PAUSED',
         campaign_budget: budgetResourceName,
         network_settings: {
-          target_google_search: channelType === 'SEARCH',
-          target_search_network: channelType === 'SEARCH',
-          target_content_network: false,
+          target_google_search: !isShopping,
+          target_search_network: !isShopping,
+          target_content_network: isShopping,
         },
+        contains_eu_political_advertising: false,
       }
 
       // Shopping campaigns require shopping_setting with merchant_id
-      if (channelType === 'SHOPPING') {
+      if (isShopping) {
         const country = ((details.country as string) || 'nl').toLowerCase()
         const merchantId = getSetting(`merchant_center_id_${country}`) || getSetting('merchant_center_id')
         if (!merchantId) throw new Error(`Geen Merchant Center ID gevonden voor land: ${country}`)
         campaignResource.shopping_setting = {
           merchant_id: Number(merchantId),
           sales_country: country.toUpperCase(),
+          campaign_priority: Number(details.priority ?? 0),
         }
         if (details.target_roas) {
           campaignResource.maximize_conversion_value = {
