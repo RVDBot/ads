@@ -443,11 +443,24 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, verified: verification.verified, verification_note: verificationNote })
   } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : 'Toepassen mislukt'
+    let errorMessage = 'Toepassen mislukt'
+    if (e instanceof Error) {
+      errorMessage = e.message
+    } else if (e && typeof e === 'object') {
+      const obj = e as Record<string, unknown>
+      if (Array.isArray(obj.errors)) {
+        errorMessage = obj.errors.map((err: any) => err.message || JSON.stringify(err)).join('; ')
+      } else if (obj.message) {
+        errorMessage = String(obj.message)
+      } else {
+        errorMessage = JSON.stringify(e).slice(0, 500)
+      }
+    }
     log('error', 'google-ads', `Chat actie mislukt: ${errorMessage}`, {
       message_id,
       action_index,
       type: action.type,
+      raw_error: JSON.stringify(e, Object.getOwnPropertyNames(e instanceof Error ? e : {})).slice(0, 1000),
     })
     return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
