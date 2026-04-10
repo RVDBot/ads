@@ -230,6 +230,9 @@ Analyseer deze data en geef je suggesties als JSON.`
     }
   }
 
+  // Remove old pending suggestions (applied/dismissed ones are kept for history)
+  db.prepare("DELETE FROM ai_suggestions WHERE status = 'pending'").run()
+
   const analysis = db.prepare(`
     INSERT INTO ai_analyses (model, input_tokens, output_tokens, findings, status)
     VALUES (?, ?, ?, ?, 'pending')
