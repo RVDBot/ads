@@ -133,7 +133,7 @@ export default function LogViewer() {
                     <span className="px-3 py-2 text-text-secondary">
                       {entry.category}
                     </span>
-                    <span className="px-3 py-2 text-text-primary truncate">
+                    <span className={`px-3 py-2 text-text-primary ${expandedId === entry.id ? 'whitespace-normal break-words' : 'truncate'}`}>
                       {entry.message}
                     </span>
                   </button>

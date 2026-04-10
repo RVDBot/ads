@@ -248,7 +248,8 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
     }
 
     case 'new_campaign': {
-      const campaignName = details.name as string
+      const campaignName = (details.campaign_name || details.name) as string
+      if (!campaignName) throw new Error('Campagnenaam ontbreekt in actie details')
       const budgetName = `Budget - ${campaignName} ${Date.now()}`
 
       // First check if a budget already exists from a previous failed attempt
