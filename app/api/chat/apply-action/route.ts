@@ -292,6 +292,11 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         advertising_channel_type: channelType,
         status: 'PAUSED',
         campaign_budget: budgetResourceName,
+        network_settings: {
+          target_google_search: channelType === 'SEARCH',
+          target_search_network: channelType === 'SEARCH',
+          target_content_network: false,
+        },
       }
 
       // Shopping campaigns require shopping_setting with merchant_id
@@ -303,16 +308,15 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
           merchant_id: Number(merchantId),
           sales_country: country.toUpperCase(),
         }
-        // Use maximize_conversion_value for ROAS-based shopping campaigns
         if (details.target_roas) {
           campaignResource.maximize_conversion_value = {
             target_roas: Number(details.target_roas),
           }
         } else {
-          campaignResource.manual_cpc = {}
+          campaignResource.manual_cpc = { enhanced_cpc_enabled: false }
         }
       } else {
-        campaignResource.manual_cpc = {}
+        campaignResource.manual_cpc = { enhanced_cpc_enabled: false }
       }
 
       return customer.mutateResources([{
@@ -462,7 +466,14 @@ export async function POST(req: NextRequest) {
     } else if (e && typeof e === 'object') {
       const obj = e as Record<string, unknown>
       if (Array.isArray(obj.errors)) {
-        errorMessage = obj.errors.map((err: any) => err.message || JSON.stringify(err)).join('; ')
+        errorMessage = obj.errors.map((err: any) => {
+          const parts = [err.message || '']
+          if (err.location?.field_path_elements) {
+            parts.push(`(veld: ${err.location.field_path_elements.map((f: any) => f.field_name).join('.')})`)
+          }
+          if (err.error_code) parts.push(`[${JSON.stringify(err.error_code)}]`)
+          return parts.filter(Boolean).join(' ') || JSON.stringify(err)
+        }).join('; ')
       } else if (obj.message) {
         errorMessage = String(obj.message)
       } else {
