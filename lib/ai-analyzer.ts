@@ -138,7 +138,7 @@ BELANGRIJK: Bij ad_text_change suggesties:
 ## Eerdere suggesties en resultaten (feedback loop)
 ${previousResults.length > 0 ? JSON.stringify(previousResults, null, 2) : 'Nog geen eerdere suggesties toegepast.'}
 
-Antwoord ALLEEN met een JSON object in dit formaat:
+Antwoord ALLEEN met een JSON object (GEEN markdown code fences, geen toelichting buiten de JSON). Houd findings kort (max 1-2 zinnen per finding) en beperk tot max 10 findings en max 10 suggesties. Formaat:
 {
   "findings": ["bevinding 1", "bevinding 2", ...],
   "suggestions": [
@@ -161,7 +161,7 @@ Gebruik ALTIJD de exacte campagne- en ad group namen uit de data hierboven. Het 
 - **pause_campaign**: { "campaign_name": "exacte naam" }
 - **keyword_add**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "keywords": ["kw1", "kw2"], "match_type": "PHRASE|EXACT|BROAD" }
 - **ad_text_change**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "headlines": ["headline1"], "descriptions": ["desc1"] }
-- **new_campaign**: { "name": "voorgestelde naam", "country": "nl", "type": "SEARCH|SHOPPING", "daily_budget": 10.0, "keywords": ["kw1"] }
+- **new_campaign**: { "campaign_name": "voorgestelde naam", "country": "nl", "type": "SEARCH|SHOPPING", "daily_budget": 10.0, "keywords": ["kw1"] }
 - **schedule_change**: { "campaign_name": "exacte naam", "schedule": "beschrijving van wijziging" }`
 
   const userMessage = `## Campagnes (laatste ${period} dagen)
@@ -195,7 +195,7 @@ Analyseer deze data en geef je suggesties als JSON.`
 
   const response = await client.messages.create({
     model,
-    max_tokens: 4096,
+    max_tokens: 8192,
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }],
   })
