@@ -110,10 +110,32 @@ export async function runAnalysis(period = 14): Promise<number> {
   const shopProfiles = db.prepare('SELECT country, profile_content FROM shop_profile').all() as Array<{ country: string; profile_content: string }>
 
   const previousResults = db.prepare(`
-    SELECT type, title, status, result_roas_before, result_roas_after
+    SELECT type, title, status, details, applied_at, result_roas_before, result_roas_after
     FROM ai_suggestions WHERE applied_at IS NOT NULL AND applied_at >= date('now', '-30 days')
     ORDER BY applied_at DESC LIMIT 20
+  `).all() as Array<{ type: string; title: string; status: string; details: string; applied_at: string; result_roas_before: number | null; result_roas_after: number | null }>
+
+  // Also get recent actions from action_log (includes chat-applied actions)
+  const recentActions = db.prepare(`
+    SELECT action_type, description, old_value, new_value, created_at
+    FROM action_log WHERE created_at >= date('now', '-14 days')
+    ORDER BY created_at DESC LIMIT 30
   `).all()
+
+  // Format previous results with parsed details for clarity
+  const previousForAI = previousResults.map(r => {
+    let details: Record<string, unknown> = {}
+    try { details = JSON.parse(r.details) } catch { /* ignore */ }
+    return {
+      type: r.type,
+      title: r.title,
+      applied_at: r.applied_at,
+      days_ago: Math.round((Date.now() - new Date(r.applied_at).getTime()) / 86400000),
+      details,
+      roas_before: r.result_roas_before,
+      roas_after: r.result_roas_after,
+    }
+  })
 
   const systemPrompt = `Je bent een expert Google Ads optimizer voor SpeedRope Shop, een e-commerce shop voor speedropes en fitness accessoires actief in 6 landen (NL, DE, FR, ES, IT, internationaal).
 
@@ -135,8 +157,18 @@ BELANGRIJK: Bij ad_text_change suggesties:
 - Schrijf in de taal van het land van de campagne (NL=Nederlands, DE=Duits, FR=Frans, ES=Spaans, IT=Italiaans).
 - Verzin NOOIT productkenmerken. Gebruik alleen wat in de productdata staat.
 
-## Eerdere suggesties en resultaten (feedback loop)
-${previousResults.length > 0 ? JSON.stringify(previousResults, null, 2) : 'Nog geen eerdere suggesties toegepast.'}
+## Recent toegepaste acties
+BELANGRIJK: Onderstaande acties zijn recent uitgevoerd. Houd hier rekening mee:
+- Acties van de afgelopen 1-3 dagen hebben nog GEEN effect gehad op de data. Stel NIET dezelfde actie opnieuw voor.
+- Als een zoekwoord recent is uitgesloten, stel het NIET opnieuw voor als negatief keyword — het effect is nog niet zichtbaar in de data.
+- Als een budget recent is aangepast, stel NIET dezelfde budget wijziging voor.
+- Gebruik de "days_ago" waarde om in te schatten of een actie al effect kan hebben gehad (minimaal 3-7 dagen nodig).
+
+### Via AI-suggesties toegepast:
+${previousForAI.length > 0 ? JSON.stringify(previousForAI, null, 2) : 'Geen.'}
+
+### Via chat/handmatig toegepast:
+${recentActions.length > 0 ? JSON.stringify(recentActions, null, 2) : 'Geen.'}
 
 Antwoord ALLEEN met een JSON object (GEEN markdown code fences, geen toelichting buiten de JSON). Houd findings kort (max 1-2 zinnen per finding) en beperk tot max 10 findings en max 10 suggesties. Formaat:
 {
