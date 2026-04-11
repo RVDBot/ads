@@ -7,6 +7,7 @@ export async function GET(req: NextRequest) {
   const status = req.nextUrl.searchParams.get('status')
   const priority = req.nextUrl.searchParams.get('priority')
   const type = req.nextUrl.searchParams.get('type')
+  const category = req.nextUrl.searchParams.get('category')
   const limit = Math.min(parseInt(req.nextUrl.searchParams.get('limit') || '50', 10), 200)
   const db = getDb()
 
@@ -15,6 +16,7 @@ export async function GET(req: NextRequest) {
   if (status) { where += ' AND s.status = ?'; params.push(status) }
   if (priority) { where += ' AND s.priority = ?'; params.push(priority) }
   if (type) { where += ' AND s.type = ?'; params.push(type) }
+  if (category) { where += ' AND s.category = ?'; params.push(category) }
   params.push(limit)
 
   const suggestions = db.prepare(`
