@@ -21,19 +21,42 @@ interface Suggestion {
   model?: string
 }
 
-const typeOptions = [
-  { value: '', label: 'Alle types' },
-  { value: 'budget_change', label: 'Budget' },
-  { value: 'bid_adjustment', label: 'Bieding' },
-  { value: 'keyword_negative', label: 'Negatief KW' },
-  { value: 'ad_text_change', label: 'Advertentie' },
-  { value: 'new_campaign', label: 'Nieuwe Campagne' },
-  { value: 'pause_campaign', label: 'Pauzeer' },
-  { value: 'keyword_add', label: 'Zoekwoord' },
-  { value: 'schedule_change', label: 'Schema' },
-]
+const CATEGORIES = [
+  { value: 'optimization', label: 'Optimalisatie' },
+  { value: 'growth', label: 'Groei' },
+  { value: 'branding', label: 'Branding' },
+] as const
+
+type Category = typeof CATEGORIES[number]['value']
+
+const TYPE_OPTIONS: Record<Category, Array<{ value: string; label: string }>> = {
+  optimization: [
+    { value: '', label: 'Alle types' },
+    { value: 'budget_change', label: 'Budget' },
+    { value: 'bid_adjustment', label: 'Bieding' },
+    { value: 'keyword_negative', label: 'Negatief KW' },
+    { value: 'ad_text_change', label: 'Advertentie' },
+    { value: 'new_campaign', label: 'Nieuwe Campagne' },
+    { value: 'pause_campaign', label: 'Pauzeer' },
+    { value: 'keyword_add', label: 'Zoekwoord' },
+    { value: 'schedule_change', label: 'Schema' },
+  ],
+  growth: [
+    { value: '', label: 'Alle types' },
+    { value: 'new_campaign', label: 'Nieuwe Campagne' },
+    { value: 'keyword_add', label: 'Zoekwoord' },
+    { value: 'market_expansion', label: 'Marktuitbreiding' },
+  ],
+  branding: [
+    { value: '', label: 'Alle types' },
+    { value: 'brand_campaign', label: 'Brand Campagne' },
+    { value: 'display_campaign', label: 'Display Campagne' },
+    { value: 'youtube_campaign', label: 'YouTube Campagne' },
+  ],
+}
 
 export default function InsightsPage() {
+  const [category, setCategory] = useState<Category>('optimization')
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [loading, setLoading] = useState(true)
   const [analyzing, setAnalyzing] = useState(false)
@@ -49,6 +72,7 @@ export default function InsightsPage() {
     setLoading(true)
     try {
       const params = new URLSearchParams()
+      params.set('category', category)
       if (priorityFilter) params.set('priority', priorityFilter)
       if (typeFilter) params.set('type', typeFilter)
       if (statusFilter) params.set('status', statusFilter)
@@ -58,15 +82,20 @@ export default function InsightsPage() {
       setSuggestions(items)
       if (items.length > 0 && items[0].analysis_date) {
         setLastAnalysis(items[0].analysis_date)
+      } else {
+        setLastAnalysis(null)
       }
     } catch {
       /* empty */
     } finally {
       setLoading(false)
     }
-  }, [priorityFilter, typeFilter, statusFilter, syncRev])
+  }, [category, priorityFilter, typeFilter, statusFilter, syncRev])
 
   useEffect(() => { fetchSuggestions() }, [fetchSuggestions])
+
+  // Reset type filter when changing category
+  useEffect(() => { setTypeFilter('') }, [category])
 
   async function handleAnalyze(period = 14) {
     setShowPeriodMenu(false)
@@ -75,7 +104,7 @@ export default function InsightsPage() {
       await apiFetch('/api/ai/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ period }),
+        body: JSON.stringify({ period, category }),
       })
       await fetchSuggestions()
     } finally {
@@ -90,6 +119,8 @@ export default function InsightsPage() {
     dismissed: suggestions.filter(s => s.status === 'dismissed').length,
   }
 
+  const categoryLabel = CATEGORIES.find(c => c.value === category)?.label || category
+
   return (
     <>
       <Nav />
@@ -100,7 +131,7 @@ export default function InsightsPage() {
             <h1 className="text-[16px] font-semibold text-text-primary">AI Inzichten</h1>
             {lastAnalysis && (
               <p className="text-[11px] text-text-tertiary mt-0.5">
-                Laatste analyse: {new Date(lastAnalysis).toLocaleString('nl-NL')}
+                Laatste {categoryLabel.toLowerCase()} analyse: {new Date(lastAnalysis).toLocaleString('nl-NL')}
               </p>
             )}
           </div>
@@ -108,7 +139,7 @@ export default function InsightsPage() {
             <div className="flex">
               <button onClick={() => handleAnalyze(14)} disabled={analyzing}
                 className="px-4 py-2 bg-accent text-white text-[12px] font-semibold rounded-l-lg hover:bg-accent-hover disabled:opacity-50 transition-colors">
-                {analyzing ? 'Analyseren...' : 'Analyseer nu'}
+                {analyzing ? 'Analyseren...' : `${categoryLabel} analyseren`}
               </button>
               <button onClick={() => setShowPeriodMenu(!showPeriodMenu)} disabled={analyzing}
                 className="px-2 py-2 bg-accent text-white rounded-r-lg hover:bg-accent-hover disabled:opacity-50 transition-colors border-l border-white/20">
@@ -135,6 +166,18 @@ export default function InsightsPage() {
           </div>
         </div>
 
+        {/* Category tabs */}
+        <div className="flex bg-surface-1 border border-border-subtle rounded-lg p-0.5 gap-0.5 mb-5 w-fit">
+          {CATEGORIES.map(cat => (
+            <button key={cat.value} onClick={() => setCategory(cat.value)}
+              className={`px-4 py-1.5 text-[12px] font-medium rounded-md transition-all ${
+                category === cat.value ? 'bg-accent text-white' : 'text-text-tertiary hover:text-text-secondary'
+              }`}>
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
         {/* Stats */}
         <div className="grid grid-cols-4 gap-3 mb-5">
           {[
@@ -152,7 +195,6 @@ export default function InsightsPage() {
 
         {/* Filters */}
         <div className="flex items-center gap-3 mb-4 flex-wrap">
-          {/* Priority filter */}
           <div className="flex bg-surface-1 border border-border-subtle rounded-lg p-0.5 gap-0.5">
             {[
               { value: '', label: 'Alle' },
@@ -169,15 +211,13 @@ export default function InsightsPage() {
             ))}
           </div>
 
-          {/* Type filter */}
           <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
             className="bg-surface-1 border border-border-subtle rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent">
-            {typeOptions.map(opt => (
+            {TYPE_OPTIONS[category].map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
 
-          {/* Status filter */}
           <div className="flex bg-surface-1 border border-border-subtle rounded-lg p-0.5 gap-0.5">
             {[
               { value: '', label: 'Alle' },
@@ -208,9 +248,9 @@ export default function InsightsPage() {
           ) : suggestions.length === 0 ? (
             <div className="py-16 text-center">
               <div className="text-[32px] mb-3 opacity-40">&#x1F50D;</div>
-              <div className="text-[14px] font-medium text-text-secondary mb-1">Nog geen analyses</div>
+              <div className="text-[14px] font-medium text-text-secondary mb-1">Nog geen {categoryLabel.toLowerCase()} analyses</div>
               <div className="text-[12px] text-text-tertiary max-w-sm mx-auto">
-                Start een analyse om AI-suggesties te ontvangen, of configureer automatische analyses in Instellingen.
+                Start een {categoryLabel.toLowerCase()} analyse om suggesties te ontvangen.
               </div>
             </div>
           ) : (
