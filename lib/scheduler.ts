@@ -42,8 +42,8 @@ function msUntilNext(hour: number, minute = 0): number {
 }
 
 export function scheduleSyncs() {
-  const freq = getSetting('sync_frequency')
-  if (!freq || freq === 'manual') {
+  const freq = getSetting('sync_frequency') || 'daily'
+  if (freq === 'manual') {
     log('info', 'system', 'Sync scheduler: alleen handmatig')
     return
   }
@@ -79,7 +79,7 @@ export function scheduleSyncs() {
     }
   }
 
-  if (freq === '4x_day') {
+  if (freq === '4x_daily' || freq === '4x_day') {
     // Run every 6 hours starting from a short delay
     const intervalMs = 6 * 60 * 60 * 1000
     function tick4x() {
