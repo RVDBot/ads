@@ -40,7 +40,7 @@ const typeBadges: Record<string, string> = {
   youtube_campaign: 'YouTube Campagne',
 }
 
-const ADVISORY_TYPES = new Set(['market_expansion', 'brand_campaign', 'display_campaign', 'youtube_campaign'])
+const ADVISORY_TYPES = new Set(['market_expansion', 'display_campaign', 'youtube_campaign'])
 
 export default function SuggestionCard({ id, title, description, priority, type, status, details, campaignName, appliedAt, roasBefore, roasAfter, onUpdate }: SuggestionCardProps) {
   const [loading, setLoading] = useState('')

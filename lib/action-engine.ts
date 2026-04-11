@@ -141,6 +141,18 @@ export async function applySuggestion(suggestionId: number, appliedBy: 'manual' 
         googleResponse = await addKeywords(details)
         break
       }
+      case 'brand_campaign': {
+        // Brand campaign is a Search campaign with branded keywords
+        details.type = 'SEARCH'
+        newValue = details.campaign_name || null
+        googleResponse = await createNewCampaign(details)
+        break
+      }
+      case 'new_campaign': {
+        newValue = details.campaign_name || null
+        googleResponse = await createNewCampaign(details)
+        break
+      }
       default: {
         log('warn', 'google-ads', `Onbekend suggestie-type: ${suggestion.type}`, { suggestionId })
         // Still mark as applied for manual-only types
@@ -255,6 +267,83 @@ async function addKeywords(details: any) {
       keyword: { text: kw, match_type: details.match_type || 'PHRASE' },
     },
   })))
+}
+
+async function createNewCampaign(details: any) {
+  const { getGoogleAdsClient } = await import('./google-ads')
+  const customer = getGoogleAdsClient()
+
+  const campaignName = details.campaign_name || details.name
+  if (!campaignName) throw new Error('Campagnenaam ontbreekt in actie details')
+  const budgetName = `Budget - ${campaignName} ${Date.now()}`
+
+  // Check for existing budget from a previous failed attempt
+  const existingBudgets = await customer.query(`
+    SELECT campaign_budget.resource_name
+    FROM campaign_budget
+    WHERE campaign_budget.name LIKE 'Budget - ${campaignName.replace(/'/g, "\\'")}%'
+    ORDER BY campaign_budget.id DESC
+    LIMIT 1
+  `)
+  let budgetResourceName = (existingBudgets[0] as any)?.campaign_budget?.resource_name
+
+  if (!budgetResourceName) {
+    await customer.mutateResources([{
+      entity: 'campaign_budget' as const,
+      operation: 'create' as const,
+      resource: {
+        name: budgetName,
+        amount_micros: Math.round(Number(details.daily_budget || 10) * 1_000_000),
+        delivery_method: 'STANDARD',
+      },
+    }])
+    const budgets = await customer.query(`
+      SELECT campaign_budget.resource_name
+      FROM campaign_budget
+      WHERE campaign_budget.name = '${budgetName.replace(/'/g, "\\'")}'
+      LIMIT 1
+    `)
+    budgetResourceName = (budgets[0] as any)?.campaign_budget?.resource_name
+  }
+
+  if (!budgetResourceName) throw new Error('Budget aanmaken mislukt — kon resource_name niet vinden')
+
+  const channelType = (details.type as string) || 'SEARCH'
+  const isShopping = channelType === 'SHOPPING'
+  const campaignResource: Record<string, unknown> = {
+    name: campaignName,
+    advertising_channel_type: channelType,
+    status: 'ENABLED',
+    campaign_budget: budgetResourceName,
+    contains_eu_political_advertising: 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING',
+  }
+
+  if (!isShopping) {
+    campaignResource.network_settings = {
+      target_google_search: true,
+      target_search_network: true,
+      target_content_network: false,
+    }
+    campaignResource.manual_cpc = { enhanced_cpc_enabled: false }
+  }
+
+  if (isShopping) {
+    const country = ((details.country as string) || 'nl').toLowerCase()
+    const merchantId = getSetting(`merchant_center_id_${country}`) || getSetting('merchant_center_id')
+    if (!merchantId) throw new Error(`Geen Merchant Center ID gevonden voor land: ${country}`)
+    campaignResource.shopping_setting = {
+      merchant_id: Number(merchantId),
+      sales_country: country.toUpperCase(),
+      campaign_priority: Number(details.priority ?? 0),
+    }
+    campaignResource.manual_cpc = { enhanced_cpc_enabled: false }
+  }
+
+  return customer.mutateResources([{
+    entity: 'campaign' as const,
+    operation: 'create' as const,
+    resource: campaignResource,
+  }])
 }
 
 // Auto-apply logic for scheduler
