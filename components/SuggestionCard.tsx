@@ -34,7 +34,13 @@ const typeBadges: Record<string, string> = {
   pause_campaign: 'Pauzeer',
   keyword_add: 'Zoekwoord',
   schedule_change: 'Schema',
+  market_expansion: 'Marktuitbreiding',
+  brand_campaign: 'Brand Campagne',
+  display_campaign: 'Display Campagne',
+  youtube_campaign: 'YouTube Campagne',
 }
+
+const ADVISORY_TYPES = new Set(['market_expansion', 'brand_campaign', 'display_campaign', 'youtube_campaign'])
 
 export default function SuggestionCard({ id, title, description, priority, type, status, details, campaignName, appliedAt, roasBefore, roasAfter, onUpdate }: SuggestionCardProps) {
   const [loading, setLoading] = useState('')
@@ -123,7 +129,7 @@ export default function SuggestionCard({ id, title, description, priority, type,
           )}
         </div>
 
-        {status === 'pending' && (
+        {status === 'pending' && !ADVISORY_TYPES.has(type) && (
           <div className="flex gap-2 shrink-0 self-center">
             <button onClick={handleApply} disabled={!!loading}
               className="px-3.5 py-1.5 bg-accent text-white text-[12px] font-semibold rounded-lg hover:bg-accent-hover disabled:opacity-50">
