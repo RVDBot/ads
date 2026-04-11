@@ -3,12 +3,130 @@ import { getDb } from './db'
 import { getSetting } from './settings'
 import { log } from './logger'
 
-export async function runAnalysis(period = 14): Promise<number> {
+// --- Shared types and helpers ---
+
+type AnalysisCategory = 'optimization' | 'growth' | 'branding'
+
+interface ParsedAnalysis {
+  findings: string[]
+  suggestions: Array<{
+    type: string
+    priority: string
+    title: string
+    description: string
+    details: Record<string, unknown>
+  }>
+}
+
+function createClient() {
   const apiKey = getSetting('anthropic_api_key')
   if (!apiKey) throw new Error('Anthropic API key niet geconfigureerd')
-
   const model = getSetting('ai_model') || 'claude-sonnet-4-6'
-  const client = new Anthropic({ apiKey })
+  return { client: new Anthropic({ apiKey }), model }
+}
+
+function parseAIResponse(raw: string): ParsedAnalysis {
+  try {
+    return JSON.parse(raw)
+  } catch {
+    try {
+      const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
+      const cleaned = jsonMatch ? jsonMatch[1].trim() : raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+      return JSON.parse(cleaned)
+    } catch {
+      const start = raw.indexOf('{')
+      const end = raw.lastIndexOf('}')
+      if (start !== -1 && end > start) {
+        try {
+          return JSON.parse(raw.slice(start, end + 1))
+        } catch {
+          log('error', 'ai', 'AI response parsing mislukt', { raw: raw.slice(0, 1000) })
+          throw new Error('AI response kon niet geparsed worden')
+        }
+      }
+      log('error', 'ai', 'AI response parsing mislukt', { raw: raw.slice(0, 1000) })
+      throw new Error('AI response kon niet geparsed worden')
+    }
+  }
+}
+
+function saveAnalysisResults(
+  db: ReturnType<typeof getDb>,
+  category: AnalysisCategory,
+  model: string,
+  usage: { input_tokens: number; output_tokens: number },
+  parsed: ParsedAnalysis,
+): number {
+  db.prepare("DELETE FROM ai_suggestions WHERE status = 'pending' AND category = ?").run(category)
+
+  const analysis = db.prepare(`
+    INSERT INTO ai_analyses (model, input_tokens, output_tokens, findings, status, category)
+    VALUES (?, ?, ?, ?, 'pending', ?)
+  `).run(model, usage.input_tokens, usage.output_tokens, JSON.stringify(parsed.findings), category)
+
+  const analysisId = Number(analysis.lastInsertRowid)
+
+  const stmt = db.prepare(`
+    INSERT INTO ai_suggestions (analysis_id, type, priority, title, description, details, status, category)
+    VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
+  `)
+  for (const s of parsed.suggestions) {
+    stmt.run(analysisId, s.type, s.priority, s.title, s.description, JSON.stringify(s.details), category)
+  }
+
+  db.prepare('INSERT INTO token_usage (analysis_id, call_type, model, input_tokens, output_tokens) VALUES (?, ?, ?, ?, ?)')
+    .run(analysisId, 'analysis', model, usage.input_tokens, usage.output_tokens)
+
+  log('info', 'ai', `${category} analyse voltooid: ${parsed.suggestions.length} suggesties`, {
+    analysisId, category, findings: parsed.findings.length, suggestions: parsed.suggestions.length, tokens: usage,
+  })
+
+  return analysisId
+}
+
+function getRecentActions(db: ReturnType<typeof getDb>) {
+  const previousResults = db.prepare(`
+    SELECT type, title, status, details, applied_at, result_roas_before, result_roas_after
+    FROM ai_suggestions WHERE applied_at IS NOT NULL AND applied_at >= date('now', '-30 days')
+    ORDER BY applied_at DESC LIMIT 20
+  `).all() as Array<{ type: string; title: string; status: string; details: string; applied_at: string; result_roas_before: number | null; result_roas_after: number | null }>
+
+  const recentActions = db.prepare(`
+    SELECT action_type, description, old_value, new_value, created_at
+    FROM action_log WHERE created_at >= date('now', '-14 days')
+    ORDER BY created_at DESC LIMIT 30
+  `).all()
+
+  const previousForAI = previousResults.map(r => {
+    let details: Record<string, unknown> = {}
+    try { details = JSON.parse(r.details) } catch {}
+    return {
+      type: r.type, title: r.title, applied_at: r.applied_at,
+      days_ago: Math.round((Date.now() - new Date(r.applied_at).getTime()) / 86400000),
+      details, roas_before: r.result_roas_before, roas_after: r.result_roas_after,
+    }
+  })
+
+  return { previousForAI, recentActions }
+}
+
+function recentActionsPrompt(previousForAI: unknown[], recentActions: unknown[]): string {
+  return `## Recent toegepaste acties
+BELANGRIJK: Onderstaande acties zijn recent uitgevoerd. Houd hier rekening mee:
+- Acties van de afgelopen 1-3 dagen hebben nog GEEN effect gehad op de data. Stel NIET dezelfde actie opnieuw voor.
+- Gebruik de "days_ago" waarde om in te schatten of een actie al effect kan hebben gehad (minimaal 3-7 dagen nodig).
+
+### Via AI-suggesties toegepast:
+${previousForAI.length > 0 ? JSON.stringify(previousForAI, null, 2) : 'Geen.'}
+
+### Via chat/handmatig toegepast:
+${recentActions.length > 0 ? JSON.stringify(recentActions, null, 2) : 'Geen.'}`
+}
+
+// --- Optimization analysis ---
+
+export async function runOptimizationAnalysis(period = 14): Promise<number> {
+  const { client, model } = createClient()
   const db = getDb()
 
   // Gather context — exclude campaigns inactive for 90+ days
@@ -109,33 +227,7 @@ export async function runAnalysis(period = 14): Promise<number> {
 
   const shopProfiles = db.prepare('SELECT country, profile_content FROM shop_profile').all() as Array<{ country: string; profile_content: string }>
 
-  const previousResults = db.prepare(`
-    SELECT type, title, status, details, applied_at, result_roas_before, result_roas_after
-    FROM ai_suggestions WHERE applied_at IS NOT NULL AND applied_at >= date('now', '-30 days')
-    ORDER BY applied_at DESC LIMIT 20
-  `).all() as Array<{ type: string; title: string; status: string; details: string; applied_at: string; result_roas_before: number | null; result_roas_after: number | null }>
-
-  // Also get recent actions from action_log (includes chat-applied actions)
-  const recentActions = db.prepare(`
-    SELECT action_type, description, old_value, new_value, created_at
-    FROM action_log WHERE created_at >= date('now', '-14 days')
-    ORDER BY created_at DESC LIMIT 30
-  `).all()
-
-  // Format previous results with parsed details for clarity
-  const previousForAI = previousResults.map(r => {
-    let details: Record<string, unknown> = {}
-    try { details = JSON.parse(r.details) } catch { /* ignore */ }
-    return {
-      type: r.type,
-      title: r.title,
-      applied_at: r.applied_at,
-      days_ago: Math.round((Date.now() - new Date(r.applied_at).getTime()) / 86400000),
-      details,
-      roas_before: r.result_roas_before,
-      roas_after: r.result_roas_after,
-    }
-  })
+  const { previousForAI, recentActions } = getRecentActions(db)
 
   const systemPrompt = `Je bent een expert Google Ads optimizer voor SpeedRope Shop, een e-commerce shop voor speedropes en fitness accessoires actief in 6 landen (NL, DE, FR, ES, IT, internationaal).
 
@@ -157,18 +249,9 @@ BELANGRIJK: Bij ad_text_change suggesties:
 - Schrijf in de taal van het land van de campagne (NL=Nederlands, DE=Duits, FR=Frans, ES=Spaans, IT=Italiaans).
 - Verzin NOOIT productkenmerken. Gebruik alleen wat in de productdata staat.
 
-## Recent toegepaste acties
-BELANGRIJK: Onderstaande acties zijn recent uitgevoerd. Houd hier rekening mee:
-- Acties van de afgelopen 1-3 dagen hebben nog GEEN effect gehad op de data. Stel NIET dezelfde actie opnieuw voor.
+${recentActionsPrompt(previousForAI, recentActions)}
 - Als een zoekwoord recent is uitgesloten, stel het NIET opnieuw voor als negatief keyword — het effect is nog niet zichtbaar in de data.
 - Als een budget recent is aangepast, stel NIET dezelfde budget wijziging voor.
-- Gebruik de "days_ago" waarde om in te schatten of een actie al effect kan hebben gehad (minimaal 3-7 dagen nodig).
-
-### Via AI-suggesties toegepast:
-${previousForAI.length > 0 ? JSON.stringify(previousForAI, null, 2) : 'Geen.'}
-
-### Via chat/handmatig toegepast:
-${recentActions.length > 0 ? JSON.stringify(recentActions, null, 2) : 'Geen.'}
 
 Antwoord ALLEEN met een JSON object (GEEN markdown code fences, geen toelichting buiten de JSON). Houd findings kort (max 1-2 zinnen per finding) en beperk tot max 10 findings en max 10 suggesties. Formaat:
 {
@@ -233,59 +316,39 @@ Analyseer deze data en geef je suggesties als JSON.`
   })
 
   const raw = (response.content[0] as { type: string; text: string }).text.trim()
+  const parsed = parseAIResponse(raw)
 
-  let parsed: { findings: string[]; suggestions: Array<{ type: string; priority: string; title: string; description: string; details: Record<string, unknown> }> }
-  try {
-    // Try direct parse first
-    parsed = JSON.parse(raw)
-  } catch {
+  return saveAnalysisResults(db, 'optimization', model, response.usage, parsed)
+}
+
+// --- Placeholder stubs for future analysis categories ---
+
+async function runGrowthAnalysis(period = 14): Promise<number> {
+  throw new Error('Growth analysis not yet implemented')
+}
+
+async function runBrandingAnalysis(period = 14): Promise<number> {
+  throw new Error('Branding analysis not yet implemented')
+}
+
+// --- Wrapper functions ---
+
+export async function runAnalysisByCategory(category: AnalysisCategory, period = 14): Promise<number> {
+  switch (category) {
+    case 'optimization': return runOptimizationAnalysis(period)
+    case 'growth': return runGrowthAnalysis(period)
+    case 'branding': return runBrandingAnalysis(period)
+  }
+}
+
+export async function runAnalysis(period = 14): Promise<number[]> {
+  const results: number[] = []
+  for (const cat of ['optimization', 'growth', 'branding'] as AnalysisCategory[]) {
     try {
-      // Strip markdown code fences
-      const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
-      const cleaned = jsonMatch ? jsonMatch[1].trim() : raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
-      parsed = JSON.parse(cleaned)
-    } catch {
-      // Last resort: find first { and last }
-      const start = raw.indexOf('{')
-      const end = raw.lastIndexOf('}')
-      if (start !== -1 && end > start) {
-        try {
-          parsed = JSON.parse(raw.slice(start, end + 1))
-        } catch {
-          log('error', 'ai', 'AI response parsing mislukt', { raw: raw.slice(0, 1000) })
-          throw new Error('AI response kon niet geparsed worden')
-        }
-      } else {
-        log('error', 'ai', 'AI response parsing mislukt', { raw: raw.slice(0, 1000) })
-        throw new Error('AI response kon niet geparsed worden')
-      }
+      results.push(await runAnalysisByCategory(cat, period))
+    } catch (e) {
+      log('error', 'ai', `${cat} analyse mislukt`, { error: e instanceof Error ? e.message : String(e) })
     }
   }
-
-  // Remove old pending suggestions (applied/dismissed ones are kept for history)
-  db.prepare("DELETE FROM ai_suggestions WHERE status = 'pending'").run()
-
-  const analysis = db.prepare(`
-    INSERT INTO ai_analyses (model, input_tokens, output_tokens, findings, status)
-    VALUES (?, ?, ?, ?, 'pending')
-  `).run(model, response.usage.input_tokens, response.usage.output_tokens, JSON.stringify(parsed.findings))
-
-  const analysisId = Number(analysis.lastInsertRowid)
-
-  const stmtSuggestion = db.prepare(`
-    INSERT INTO ai_suggestions (analysis_id, type, priority, title, description, details, status)
-    VALUES (?, ?, ?, ?, ?, ?, 'pending')
-  `)
-  for (const s of parsed.suggestions) {
-    stmtSuggestion.run(analysisId, s.type, s.priority, s.title, s.description, JSON.stringify(s.details))
-  }
-
-  db.prepare('INSERT INTO token_usage (analysis_id, call_type, model, input_tokens, output_tokens) VALUES (?, ?, ?, ?, ?)')
-    .run(analysisId, 'analysis', model, response.usage.input_tokens, response.usage.output_tokens)
-
-  log('info', 'ai', `Analyse voltooid: ${parsed.suggestions.length} suggesties`, {
-    analysisId, findings: parsed.findings.length, suggestions: parsed.suggestions.length, tokens: response.usage
-  })
-
-  return analysisId
+  return results
 }
