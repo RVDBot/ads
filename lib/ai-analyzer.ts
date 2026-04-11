@@ -323,8 +323,140 @@ Analyseer deze data en geef je suggesties als JSON.`
 
 // --- Placeholder stubs for future analysis categories ---
 
-async function runGrowthAnalysis(period = 14): Promise<number> {
-  throw new Error('Growth analysis not yet implemented')
+export async function runGrowthAnalysis(period = 14): Promise<number> {
+  const { client, model } = createClient()
+  const db = getDb()
+
+  const campaigns = db.prepare(`
+    SELECT c.name, c.country, c.type,
+      SUM(dm.cost) as total_cost, SUM(dm.conversion_value) as total_value,
+      SUM(dm.conversions) as total_conv, SUM(dm.clicks) as total_clicks,
+      SUM(dm.impressions) as total_impressions,
+      CASE WHEN SUM(dm.cost) > 0 THEN SUM(dm.conversion_value) / SUM(dm.cost) ELSE 0 END as roas
+    FROM campaigns c
+    LEFT JOIN daily_metrics dm ON dm.campaign_id = c.id AND dm.date >= date('now', '-' || ? || ' days')
+    WHERE c.status = 'ENABLED'
+    GROUP BY c.id
+  `).all(period)
+
+  // Keywords performing well — potential for expansion to other markets
+  const topConvertingKeywords = db.prepare(`
+    SELECT k.text, k.match_type, c.name as campaign, c.country,
+      SUM(km.cost) as cost, SUM(km.clicks) as clicks,
+      SUM(km.conversions) as conversions, SUM(km.conversion_value) as value,
+      CASE WHEN SUM(km.cost) > 0 THEN SUM(km.conversion_value) / SUM(km.cost) ELSE 0 END as roas
+    FROM keywords k
+    JOIN keyword_metrics km ON km.keyword_id = k.id AND km.date >= date('now', '-' || ? || ' days')
+    JOIN ad_groups ag ON ag.id = k.adgroup_id
+    JOIN campaigns c ON c.id = ag.campaign_id
+    WHERE km.conversions > 0
+    GROUP BY k.text, c.country ORDER BY conversions DESC LIMIT 50
+  `).all(period)
+
+  // Search terms that convert — candidates for new keywords
+  const convertingSearchTerms = db.prepare(`
+    SELECT search_term, campaign_name, SUM(cost) as cost, SUM(clicks) as clicks,
+      SUM(conversions) as conversions, SUM(conversion_value) as value
+    FROM search_terms WHERE date >= date('now', '-' || ? || ' days') AND conversions > 0
+    GROUP BY search_term ORDER BY conversions DESC LIMIT 30
+  `).all(period)
+
+  const products = db.prepare(`
+    SELECT title, price, margin_label, country
+    FROM products WHERE status = 'approved'
+    ORDER BY margin_label DESC
+  `).all()
+
+  // GA4 analytics per country — organic traffic reveals untapped markets
+  const ga4ByCountry = db.prepare(`
+    SELECT country, SUM(sessions) as sessions, AVG(bounce_rate) as bounce_rate,
+      AVG(avg_session_duration) as avg_duration
+    FROM ga4_pages WHERE date >= date('now', '-' || ? || ' days') AND country IS NOT NULL
+    GROUP BY country ORDER BY sessions DESC
+  `).all(period)
+
+  // GA4 top pages per country — which products attract organic interest
+  const ga4TopPages = db.prepare(`
+    SELECT page_path, country, SUM(sessions) as sessions, AVG(bounce_rate) as bounce_rate
+    FROM ga4_pages WHERE date >= date('now', '-' || ? || ' days') AND country IS NOT NULL
+    GROUP BY page_path, country ORDER BY sessions DESC LIMIT 50
+  `).all(period)
+
+  const shopProfiles = db.prepare('SELECT country, profile_content FROM shop_profile').all() as Array<{ country: string; profile_content: string }>
+  const { previousForAI, recentActions } = getRecentActions(db)
+
+  const systemPrompt = `Je bent een groei-strateeg voor SpeedRope Shop, een e-commerce shop voor speedropes en fitness accessoires.
+
+${shopProfiles.map(p => `## Shop Profiel ${p.country.toUpperCase()}\n${p.profile_content}`).join('\n\n')}
+
+## Marktdekking
+SpeedRopeShop is actief in deze markten:
+- NL campagnes: bedienen Nederland + België (Nederlandstalig)
+- FR campagnes: bedienen Frankrijk + België (Franstalig)
+- DE campagnes: bedienen Duitsland + Oostenrijk + Denemarken (Duitstalig)
+- ES campagnes: bedienen Spanje
+- IT campagnes: bedienen Italië
+- COM campagnes (Engels): bedienen NL, BE, LU, DE, AT, DK, FR, ES, IT, UK, NO, CH, SE, GR, FI
+
+## Jouw taak
+Analyseer de data en identificeer GROEI-kansen om meer verkeer en omzet te genereren. Focus op:
+- Welke landen/markten worden nog niet bediend maar passen bij de marktstructuur?
+- Welke goed presterende zoekwoorden/producten in land X bestaan nog niet in land Y?
+- Welke product-categorieën hebben nog geen campagne?
+- Waar komt al organisch verkeer vandaan zonder ads? (= bewezen kans voor ads)
+- Nieuwe zoekwoorden op basis van goed converterende search terms
+- High-margin producten die meer exposure verdienen
+
+${recentActionsPrompt(previousForAI, recentActions)}
+
+Antwoord ALLEEN met een JSON object (GEEN markdown code fences). Max 10 findings, max 10 suggesties. Formaat:
+{
+  "findings": ["bevinding 1", ...],
+  "suggestions": [
+    {
+      "type": "new_campaign|keyword_add|market_expansion",
+      "priority": "high|medium|low",
+      "title": "Korte titel",
+      "description": "Uitleg waarom en verwacht effect",
+      "details": { ... }
+    }
+  ]
+}
+
+## Details-velden per type
+- **new_campaign**: { "campaign_name": "naam", "country": "nl", "type": "SEARCH|SHOPPING", "daily_budget": 10.0, "keywords": ["kw1"] }
+- **keyword_add**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "keywords": ["kw1", "kw2"], "match_type": "PHRASE|EXACT|BROAD" }
+- **market_expansion**: { "target_country": "at", "source_country": "de", "rationale": "uitleg", "recommended_budget": 10.0, "recommended_campaign_type": "SEARCH|SHOPPING" }`
+
+  const userMessage = `## Huidige campagnes (laatste ${period} dagen)
+${JSON.stringify(campaigns, null, 2)}
+
+## Top converterende zoekwoorden per land (${period} dagen)
+${JSON.stringify(topConvertingKeywords, null, 2)}
+
+## Converterende zoektermen (${period} dagen)
+${JSON.stringify(convertingSearchTerms, null, 2)}
+
+## Producten (Merchant Center)
+${JSON.stringify((products as any[]).slice(0, 40).map(p => ({ title: p.title, price: p.price, margin_label: p.margin_label, country: p.country })), null, 2)}
+
+## Organisch verkeer per land (GA4, ${period} dagen)
+${JSON.stringify(ga4ByCountry, null, 2)}
+
+## Top landingspagina's per land (GA4, ${period} dagen)
+${JSON.stringify(ga4TopPages, null, 2)}
+
+Identificeer groei-kansen als JSON.`
+
+  const response = await client.messages.create({
+    model, max_tokens: 8192,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userMessage }],
+  })
+
+  const raw = (response.content[0] as { type: string; text: string }).text.trim()
+  const parsed = parseAIResponse(raw)
+  return saveAnalysisResults(db, 'growth', model, response.usage, parsed)
 }
 
 async function runBrandingAnalysis(period = 14): Promise<number> {
