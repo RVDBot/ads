@@ -459,8 +459,95 @@ Identificeer groei-kansen als JSON.`
   return saveAnalysisResults(db, 'growth', model, response.usage, parsed)
 }
 
-async function runBrandingAnalysis(period = 14): Promise<number> {
-  throw new Error('Branding analysis not yet implemented')
+export async function runBrandingAnalysis(period = 14): Promise<number> {
+  const { client, model } = createClient()
+  const db = getDb()
+
+  // Branded search terms — how is the brand performing?
+  const brandedTerms = db.prepare(`
+    SELECT search_term, campaign_name, SUM(cost) as cost, SUM(clicks) as clicks,
+      SUM(impressions) as impressions, SUM(conversions) as conversions, SUM(conversion_value) as value
+    FROM search_terms WHERE date >= date('now', '-' || ? || ' days')
+      AND (LOWER(search_term) LIKE '%speedrope%' OR LOWER(search_term) LIKE '%speed rope%'
+           OR LOWER(search_term) LIKE '%speedropeshop%')
+    GROUP BY search_term ORDER BY impressions DESC LIMIT 30
+  `).all(period)
+
+  // All campaign types — what channels are already used?
+  const campaignTypes = db.prepare(`
+    SELECT name, country, type, status,
+      SUM(dm.impressions) as impressions, SUM(dm.clicks) as clicks, SUM(dm.cost) as cost
+    FROM campaigns c
+    LEFT JOIN daily_metrics dm ON dm.campaign_id = c.id AND dm.date >= date('now', '-' || ? || ' days')
+    GROUP BY c.id
+  `).all(period)
+
+  const products = db.prepare(`
+    SELECT title, price, margin_label, country
+    FROM products WHERE status = 'approved'
+    ORDER BY margin_label DESC LIMIT 30
+  `).all()
+
+  const shopProfiles = db.prepare('SELECT country, profile_content FROM shop_profile').all() as Array<{ country: string; profile_content: string }>
+  const { previousForAI, recentActions } = getRecentActions(db)
+
+  const systemPrompt = `Je bent een branding-strateeg voor SpeedRope Shop, een e-commerce shop voor speedropes en fitness accessoires.
+
+${shopProfiles.map(p => `## Shop Profiel ${p.country.toUpperCase()}\n${p.profile_content}`).join('\n\n')}
+
+## Marktdekking
+- NL: Nederland + België (NL) | FR: Frankrijk + België (FR) | DE: Duitsland + Oostenrijk + Denemarken
+- ES: Spanje | IT: Italië | COM (Engels): NL, BE, LU, DE, AT, DK, FR, ES, IT, UK, NO, CH, SE, GR, FI
+
+## Jouw taak
+SpeedRopeShop heeft momenteel GEEN branding-campagnes (Display, YouTube, branded search). Analyseer de data en stel voor hoe merkbekendheid vergroot kan worden. Focus op:
+- Display-campagnes: welke markten, welk budget, welke doelgroep
+- YouTube/Video-campagnes: welke markten, type content (product demos, reviews)
+- Branded search: campagnes om de merknaam te beschermen in zoekresultaten
+- Retargeting: bezoekers opnieuw bereiken via Display/YouTube
+- Per voorstel: aanbevolen budget, doelland, verwacht bereik
+
+${recentActionsPrompt(previousForAI, recentActions)}
+
+Antwoord ALLEEN met een JSON object (GEEN markdown code fences). Max 8 findings, max 8 suggesties. Formaat:
+{
+  "findings": ["bevinding 1", ...],
+  "suggestions": [
+    {
+      "type": "brand_campaign|display_campaign|youtube_campaign",
+      "priority": "high|medium|low",
+      "title": "Korte titel",
+      "description": "Uitleg met verwacht bereik en aanbevolen budget",
+      "details": { ... }
+    }
+  ]
+}
+
+## Details-velden per type
+- **brand_campaign**: { "campaign_name": "voorgestelde naam", "country": "nl", "daily_budget": 5.0, "keywords": ["speedrope shop", "speedropeshop"], "rationale": "uitleg" }
+- **display_campaign**: { "campaign_name": "voorgestelde naam", "country": "nl", "daily_budget": 10.0, "target_audience": "beschrijving doelgroep", "rationale": "uitleg" }
+- **youtube_campaign**: { "campaign_name": "voorgestelde naam", "country": "nl", "daily_budget": 15.0, "video_concept": "beschrijving video type", "rationale": "uitleg" }`
+
+  const userMessage = `## Branded zoektermen (laatste ${period} dagen)
+${JSON.stringify(brandedTerms, null, 2)}
+
+## Alle campagnes en kanalen
+${JSON.stringify(campaignTypes, null, 2)}
+
+## Producten (top 30)
+${JSON.stringify(products, null, 2)}
+
+Stel branding-strategieën voor als JSON.`
+
+  const response = await client.messages.create({
+    model, max_tokens: 8192,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userMessage }],
+  })
+
+  const raw = (response.content[0] as { type: string; text: string }).text.trim()
+  const parsed = parseAIResponse(raw)
+  return saveAnalysisResults(db, 'branding', model, response.usage, parsed)
 }
 
 // --- Wrapper functions ---
