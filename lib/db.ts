@@ -192,7 +192,8 @@ function initSchema(db: Database.Database) {
       input_tokens INTEGER NOT NULL DEFAULT 0,
       output_tokens INTEGER NOT NULL DEFAULT 0,
       findings TEXT NOT NULL DEFAULT '[]',
-      status TEXT NOT NULL DEFAULT 'pending'
+      status TEXT NOT NULL DEFAULT 'pending',
+      category TEXT NOT NULL DEFAULT 'optimization'
     );
 
     CREATE TABLE IF NOT EXISTS ai_suggestions (
@@ -207,6 +208,7 @@ function initSchema(db: Database.Database) {
       applied_at DATETIME,
       result_roas_before REAL,
       result_roas_after REAL,
+      category TEXT NOT NULL DEFAULT 'optimization',
       FOREIGN KEY (analysis_id) REFERENCES ai_analyses(id) ON DELETE CASCADE
     );
 
@@ -278,4 +280,7 @@ function initSchema(db: Database.Database) {
   if (!tuCols.some(c => c.name === 'model')) {
     db.exec('ALTER TABLE token_usage ADD COLUMN model TEXT')
   }
+
+  try { db.exec("ALTER TABLE ai_analyses ADD COLUMN category TEXT NOT NULL DEFAULT 'optimization'") } catch {}
+  try { db.exec("ALTER TABLE ai_suggestions ADD COLUMN category TEXT NOT NULL DEFAULT 'optimization'") } catch {}
 }
