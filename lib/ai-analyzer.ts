@@ -355,10 +355,12 @@ export async function runGrowthAnalysis(period = 14): Promise<number> {
 
   // Search terms that convert — candidates for new keywords
   const convertingSearchTerms = db.prepare(`
-    SELECT search_term, campaign_name, SUM(cost) as cost, SUM(clicks) as clicks,
-      SUM(conversions) as conversions, SUM(conversion_value) as value
-    FROM search_terms WHERE date >= date('now', '-' || ? || ' days') AND conversions > 0
-    GROUP BY search_term ORDER BY conversions DESC LIMIT 30
+    SELECT st.search_term, c.name as campaign_name, SUM(st.cost) as cost, SUM(st.clicks) as clicks,
+      SUM(st.conversions) as conversions, SUM(st.conversion_value) as value
+    FROM search_terms st
+    JOIN campaigns c ON c.id = st.campaign_id
+    WHERE st.date >= date('now', '-' || ? || ' days') AND st.conversions > 0
+    GROUP BY st.search_term ORDER BY conversions DESC LIMIT 30
   `).all(period)
 
   const products = db.prepare(`
@@ -465,12 +467,14 @@ export async function runBrandingAnalysis(period = 14): Promise<number> {
 
   // Branded search terms — how is the brand performing?
   const brandedTerms = db.prepare(`
-    SELECT search_term, campaign_name, SUM(cost) as cost, SUM(clicks) as clicks,
-      SUM(impressions) as impressions, SUM(conversions) as conversions, SUM(conversion_value) as value
-    FROM search_terms WHERE date >= date('now', '-' || ? || ' days')
-      AND (LOWER(search_term) LIKE '%speedrope%' OR LOWER(search_term) LIKE '%speed rope%'
-           OR LOWER(search_term) LIKE '%speedropeshop%')
-    GROUP BY search_term ORDER BY impressions DESC LIMIT 30
+    SELECT st.search_term, c.name as campaign_name, SUM(st.cost) as cost, SUM(st.clicks) as clicks,
+      SUM(st.conversions) as conversions, SUM(st.conversion_value) as value
+    FROM search_terms st
+    JOIN campaigns c ON c.id = st.campaign_id
+    WHERE st.date >= date('now', '-' || ? || ' days')
+      AND (LOWER(st.search_term) LIKE '%speedrope%' OR LOWER(st.search_term) LIKE '%speed rope%'
+           OR LOWER(st.search_term) LIKE '%speedropeshop%')
+    GROUP BY st.search_term ORDER BY clicks DESC LIMIT 30
   `).all(period)
 
   // All campaign types — what channels are already used?
