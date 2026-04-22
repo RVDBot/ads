@@ -241,6 +241,11 @@ Analyseer de Google Ads data en geef concrete, actionable suggesties om de ROAS 
 - Landingspagina-kwaliteit (hoge bounce rate = probleem)
 - Trends (dalende ROAS = actie nodig)
 
+## Campagnetype regels
+BELANGRIJK: Shopping campagnes (type=SHOPPING) gebruiken een productfeed — GEEN zoekwoorden.
+Stel NOOIT keyword_add, keyword_negative of bid_adjustment voor bij Shopping campagnes.
+keyword_add en keyword_negative zijn alleen geldig voor Search campagnes (type=SEARCH).
+
 ## Advertentietekst regels
 BELANGRIJK: Bij ad_text_change suggesties:
 - Je krijgt de HUIDIGE headlines en descriptions per adgroup. Verbeter deze, niet verzinnen.
@@ -400,6 +405,10 @@ SpeedRopeShop is actief in deze markten:
 - ES campagnes: bedienen Spanje
 - IT campagnes: bedienen Italië
 - COM campagnes (Engels): bedienen NL, BE, LU, DE, AT, DK, FR, ES, IT, UK, NO, CH, SE, GR, FI
+
+## Campagnetype regels
+BELANGRIJK: Shopping campagnes (type=SHOPPING) gebruiken een productfeed — GEEN zoekwoorden.
+Stel NOOIT keyword_add voor bij Shopping campagnes. keyword_add is alleen geldig voor Search campagnes (type=SEARCH).
 
 ## Jouw taak
 Analyseer de data en identificeer GROEI-kansen om meer verkeer en omzet te genereren. Focus op:

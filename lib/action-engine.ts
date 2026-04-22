@@ -125,6 +125,8 @@ export async function applySuggestion(suggestionId: number, appliedBy: 'manual' 
       }
       case 'keyword_negative': {
         if (!details.google_campaign_id) throw new Error('Campagne niet gevonden voor negatief zoekwoord')
+        const negCampType = db.prepare('SELECT type FROM campaigns WHERE google_campaign_id = ?').get(String(details.google_campaign_id)) as { type: string } | undefined
+        if (negCampType?.type === 'SHOPPING') throw new Error(`keyword_negative is niet mogelijk voor Shopping campagne "${details.campaign_name}"`)
         newValue = details.keyword
         googleResponse = await addNegativeKeyword(details)
         break
@@ -137,6 +139,12 @@ export async function applySuggestion(suggestionId: number, appliedBy: 'manual' 
         break
       }
       case 'keyword_add': {
+        if (!details.google_campaign_id && details.campaign_name) {
+          const camp = findCampaignByName(db, details.campaign_name)
+          if (camp) details.google_campaign_id = camp.google_campaign_id
+        }
+        const campType = db.prepare('SELECT type FROM campaigns WHERE google_campaign_id = ?').get(String(details.google_campaign_id || '')) as { type: string } | undefined
+        if (campType?.type === 'SHOPPING') throw new Error(`keyword_add is niet mogelijk voor Shopping campagne "${details.campaign_name}"`)
         newValue = details.keyword || details.keywords?.join(', ')
         googleResponse = await addKeywords(details)
         break
