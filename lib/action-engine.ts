@@ -339,11 +339,116 @@ async function createNewCampaign(details: any) {
     campaignResource.manual_cpc = { enhanced_cpc_enabled: false }
   }
 
-  return customer.mutateResources([{
+  const campaignResult = await customer.mutateResources([{
     entity: 'campaign' as const,
     operation: 'create' as const,
     resource: campaignResource,
   }])
+
+  if (!isShopping) {
+    await createSearchCampaignContent(customer, details, campaignName)
+  }
+
+  return campaignResult
+}
+
+function getShopUrl(country: string): string {
+  const urls: Record<string, string> = {
+    nl: 'https://speedropeshop.nl',
+    de: 'https://speedropeshop.de',
+    fr: 'https://speedropeshop.fr',
+    es: 'https://speedropeshop.es',
+    it: 'https://speedropeshop.it',
+  }
+  return urls[(country || '').toLowerCase()] || 'https://speedropeshop.com'
+}
+
+async function createSearchCampaignContent(customer: any, details: any, campaignName: string) {
+  try {
+    const escapedName = campaignName.replace(/'/g, "\\'")
+    const createdCampaigns = await customer.query(`
+      SELECT campaign.resource_name
+      FROM campaign
+      WHERE campaign.name = '${escapedName}'
+      AND campaign.status != 'REMOVED'
+      ORDER BY campaign.id DESC
+      LIMIT 1
+    `)
+    const campaignResourceName = (createdCampaigns[0] as any)?.campaign?.resource_name
+    if (!campaignResourceName) {
+      log('warn', 'google-ads', `Ad group aanmaken overgeslagen: campagne resource_name niet gevonden voor "${campaignName}"`)
+      return
+    }
+
+    // Ad group aanmaken
+    const adGroupName = 'Hoofdgroep'
+    await customer.mutateResources([{
+      entity: 'ad_group' as const,
+      operation: 'create' as const,
+      resource: {
+        name: adGroupName,
+        campaign: campaignResourceName,
+        status: 'ENABLED',
+      },
+    }])
+
+    const createdAdGroups = await customer.query(`
+      SELECT ad_group.resource_name
+      FROM ad_group
+      WHERE ad_group.campaign = '${campaignResourceName}'
+      AND ad_group.name = '${adGroupName}'
+      AND ad_group.status != 'REMOVED'
+      LIMIT 1
+    `)
+    const adGroupResourceName = (createdAdGroups[0] as any)?.ad_group?.resource_name
+    if (!adGroupResourceName) {
+      log('warn', 'google-ads', `Keywords aanmaken overgeslagen: ad group resource_name niet gevonden voor "${campaignName}"`)
+      return
+    }
+
+    // Keywords toevoegen
+    const keywords: string[] = Array.isArray(details.keywords) ? details.keywords : []
+    if (keywords.length > 0) {
+      await customer.mutateResources(keywords.map((kw: string) => ({
+        entity: 'ad_group_criterion' as const,
+        operation: 'create' as const,
+        resource: {
+          ad_group: adGroupResourceName,
+          keyword: { text: kw, match_type: 'PHRASE' },
+          status: 'ENABLED',
+        },
+      })))
+      log('info', 'google-ads', `${keywords.length} keywords toegevoegd aan "${campaignName}"`)
+    }
+
+    // RSA aanmaken als headlines/descriptions beschikbaar zijn
+    const headlines: string[] = Array.isArray(details.headlines) ? details.headlines : []
+    const descriptions: string[] = Array.isArray(details.descriptions) ? details.descriptions : []
+
+    if (headlines.length >= 3 && descriptions.length >= 2) {
+      const finalUrl = getShopUrl(details.country)
+      await customer.mutateResources([{
+        entity: 'ad_group_ad' as const,
+        operation: 'create' as const,
+        resource: {
+          ad_group: adGroupResourceName,
+          status: 'ENABLED',
+          ad: {
+            final_urls: [finalUrl],
+            responsive_search_ad: {
+              headlines: headlines.map((text: string) => ({ text })),
+              descriptions: descriptions.map((text: string) => ({ text })),
+            },
+          },
+        },
+      }])
+      log('info', 'google-ads', `RSA aangemaakt voor campagne "${campaignName}" met final URL ${finalUrl}`)
+    } else {
+      log('warn', 'google-ads', `RSA overgeslagen voor "${campaignName}": onvoldoende headlines (${headlines.length}) of descriptions (${descriptions.length}) in suggestie`)
+    }
+  } catch (e) {
+    log('error', 'google-ads', `Ad group/keywords/RSA aanmaken mislukt voor "${campaignName}"`, { error: errorToString(e) })
+  }
 }
 
 // Auto-apply logic for scheduler

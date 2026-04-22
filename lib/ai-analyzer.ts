@@ -276,7 +276,8 @@ Gebruik ALTIJD de exacte campagne- en ad group namen uit de data hierboven. Het 
 - **pause_campaign**: { "campaign_name": "exacte naam" }
 - **keyword_add**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "keywords": ["kw1", "kw2"], "match_type": "PHRASE|EXACT|BROAD" }
 - **ad_text_change**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "headlines": ["headline1"], "descriptions": ["desc1"] }
-- **new_campaign**: { "campaign_name": "voorgestelde naam", "country": "nl", "type": "SEARCH|SHOPPING", "daily_budget": 10.0, "keywords": ["kw1"] }
+- **new_campaign**: { "campaign_name": "voorgestelde naam", "country": "nl", "type": "SEARCH|SHOPPING", "daily_budget": 10.0, "keywords": ["kw1"], "headlines": ["headline1", "headline2", "headline3"], "descriptions": ["desc1", "desc2"] }
+  (SEARCH: verplicht 3+ headlines max 30 tekens, 2+ descriptions max 90 tekens, in de taal van het land. SHOPPING: headlines/descriptions weglaten.)
 - **schedule_change**: { "campaign_name": "exacte naam", "schedule": "beschrijving van wijziging" }`
 
   const userMessage = `## Campagnes (laatste ${period} dagen)
@@ -426,7 +427,8 @@ Antwoord ALLEEN met een JSON object (GEEN markdown code fences). Max 10 findings
 }
 
 ## Details-velden per type
-- **new_campaign**: { "campaign_name": "naam", "country": "nl", "type": "SEARCH|SHOPPING", "daily_budget": 10.0, "keywords": ["kw1"] }
+- **new_campaign**: { "campaign_name": "naam", "country": "nl", "type": "SEARCH|SHOPPING", "daily_budget": 10.0, "keywords": ["kw1"], "headlines": ["headline1", "headline2", "headline3"], "descriptions": ["desc1", "desc2"] }
+  (SEARCH: verplicht 3+ headlines max 30 tekens, 2+ descriptions max 90 tekens, in de taal van het land. SHOPPING: headlines/descriptions weglaten.)
 - **keyword_add**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "keywords": ["kw1", "kw2"], "match_type": "PHRASE|EXACT|BROAD" }
 - **market_expansion**: { "target_country": "at", "source_country": "de", "rationale": "uitleg", "recommended_budget": 10.0, "recommended_campaign_type": "SEARCH|SHOPPING" }`
 
@@ -528,7 +530,8 @@ Antwoord ALLEEN met een JSON object (GEEN markdown code fences). Max 8 findings,
 }
 
 ## Details-velden per type
-- **brand_campaign**: { "campaign_name": "voorgestelde naam", "country": "nl", "daily_budget": 5.0, "keywords": ["speedrope shop", "speedropeshop"], "rationale": "uitleg" }
+- **brand_campaign**: { "campaign_name": "voorgestelde naam", "country": "nl", "daily_budget": 5.0, "keywords": ["speedrope shop", "speedropeshop"], "headlines": ["headline1", "headline2", "headline3"], "descriptions": ["desc1", "desc2"], "rationale": "uitleg" }
+  (Verplicht 3+ headlines max 30 tekens, 2+ descriptions max 90 tekens, in de taal van het land. Gebruik de merknaam en onderscheidende kenmerken.)
 - **display_campaign**: { "campaign_name": "voorgestelde naam", "country": "nl", "daily_budget": 10.0, "target_audience": "beschrijving doelgroep", "rationale": "uitleg" }
 - **youtube_campaign**: { "campaign_name": "voorgestelde naam", "country": "nl", "daily_budget": 15.0, "video_concept": "beschrijving video type", "rationale": "uitleg" }`
 
