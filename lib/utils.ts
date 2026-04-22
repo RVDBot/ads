@@ -12,8 +12,22 @@ export function formatRoas(value: number): string {
 
 export function countryFlag(code: string | null | undefined): string {
   if (!code) return '\u{1F310}'
-  const flags: Record<string, string> = { nl: '\u{1F1F3}\u{1F1F1}', de: '\u{1F1E9}\u{1F1EA}', fr: '\u{1F1EB}\u{1F1F7}', es: '\u{1F1EA}\u{1F1F8}', it: '\u{1F1EE}\u{1F1F9}', com: '\u{1F310}', en: '\u{1F310}' }
-  return flags[code.toLowerCase()] || code
+  const lower = code.toLowerCase().trim()
+  if (lower === 'com' || lower === 'en') return '\u{1F310}'
+  const upper = lower.toUpperCase()
+  if (upper.length === 2) {
+    return String.fromCodePoint(
+      0x1F1E6 + upper.charCodeAt(0) - 65,
+      0x1F1E6 + upper.charCodeAt(1) - 65,
+    )
+  }
+  return code
+}
+
+export function targetFlags(str: string | null | undefined, fallback?: string | null): string {
+  if (str) return str.split(',').map(c => countryFlag(c.trim())).join(' ')
+  if (fallback) return countryFlag(fallback)
+  return '\u2014'
 }
 
 export function countryName(code: string | null | undefined): string {

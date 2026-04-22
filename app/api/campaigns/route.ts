@@ -26,7 +26,8 @@ export async function GET(req: NextRequest) {
       SUM(dm.cost) as total_cost, SUM(dm.clicks) as total_clicks,
       SUM(dm.impressions) as total_impressions, SUM(dm.conversions) as total_conversions,
       SUM(dm.conversion_value) as total_value,
-      CASE WHEN SUM(dm.cost) > 0 THEN SUM(dm.conversion_value) / SUM(dm.cost) ELSE 0 END as roas
+      CASE WHEN SUM(dm.cost) > 0 THEN SUM(dm.conversion_value) / SUM(dm.cost) ELSE 0 END as roas,
+      CAST(julianday('now') - julianday((SELECT MIN(date) FROM daily_metrics WHERE campaign_id = c.id)) AS INTEGER) as days_active
     FROM campaigns c
     LEFT JOIN daily_metrics dm ON dm.campaign_id = c.id AND dm.date >= ?
     WHERE 1=1 ${countryFilter}

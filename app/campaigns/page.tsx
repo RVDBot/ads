@@ -6,7 +6,7 @@ import Nav from '@/components/Nav'
 import CountryFilter from '@/components/CountryFilter'
 import PeriodFilter from '@/components/PeriodFilter'
 import { apiFetch, useSyncRefresh } from '@/lib/api'
-import { formatCurrency, formatRoas, countryFlag } from '@/lib/utils'
+import { formatCurrency, formatRoas, targetFlags } from '@/lib/utils'
 
 interface Campaign {
   id: number
@@ -22,6 +22,7 @@ interface Campaign {
   total_value: number
   roas: number
   sparkline: number[]
+  days_active: number | null
 }
 
 function roasColor(roas: number): string {
@@ -123,7 +124,7 @@ export default function CampaignsPage() {
       .catch(() => setLoading(false))
   }, [country, period, syncRev])
 
-  const filtered = campaigns
+  const sorted = campaigns
     .filter(c => {
       if (typeFilter && c.type !== typeFilter) return false
       if (statusFilter && c.status !== statusFilter) return false
@@ -135,6 +136,9 @@ export default function CampaignsPage() {
       const cmp = typeof aVal === 'string' ? aVal.localeCompare(bVal) : (aVal as number) - (bVal as number)
       return sortDir === 'desc' ? -cmp : cmp
     })
+
+  const active = sorted.filter(c => c.status === 'ENABLED')
+  const inactive = sorted.filter(c => c.status !== 'ENABLED')
 
   return (
     <>
@@ -148,7 +152,7 @@ export default function CampaignsPage() {
           </div>
         </div>
 
-        {/* Type + Status filters */}
+        {/* Type filter */}
         <div className="flex items-center gap-3 mb-4">
           <div className="flex bg-surface-1 border border-border-subtle rounded-lg p-0.5 gap-0.5">
             {['', 'SEARCH', 'SHOPPING', 'PERFORMANCE_MAX'].map(t => (
@@ -160,94 +164,171 @@ export default function CampaignsPage() {
               </button>
             ))}
           </div>
-          <div className="flex bg-surface-1 border border-border-subtle rounded-lg p-0.5 gap-0.5">
-            {['', 'ENABLED', 'PAUSED'].map(s => (
-              <button key={s} onClick={() => setStatusFilter(s)}
-                className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all ${
-                  statusFilter === s ? 'bg-accent text-white' : 'text-text-tertiary hover:text-text-secondary'
-                }`}>
-                {s === 'ENABLED' ? 'Live' : s === 'PAUSED' ? 'Gepauzeerd' : 'Alle statussen'}
-              </button>
-            ))}
-          </div>
           <span className="text-[11px] text-text-tertiary ml-auto">
-            {filtered.length} campagne{filtered.length !== 1 ? 's' : ''}
+            {active.length + inactive.length} campagne{active.length + inactive.length !== 1 ? 's' : ''}
           </span>
         </div>
 
-        {/* Table */}
-        <div className="bg-surface-1 border border-border-subtle rounded-2xl overflow-hidden">
-          {loading ? (
-            <div className="p-8 space-y-3">
-              {[...Array(5)].map((_, i) => <div key={i} className="skeleton h-10 rounded-lg" />)}
+        {loading ? (
+          <div className="bg-surface-1 border border-border-subtle rounded-2xl p-8 space-y-3">
+            {[...Array(5)].map((_, i) => <div key={i} className="skeleton h-10 rounded-lg" />)}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Actieve campagnes */}
+            <div>
+              <h2 className="text-[12px] font-semibold text-text-secondary mb-2 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-success inline-block" />
+                Actief ({active.length})
+              </h2>
+              <div className="bg-surface-1 border border-border-subtle rounded-2xl overflow-hidden">
+                {active.length === 0 ? (
+                  <div className="p-8 text-center text-text-tertiary text-[13px]">Geen actieve campagnes</div>
+                ) : (
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border-subtle">
+                        {([
+                          { key: 'name', label: 'Naam', align: 'left' },
+                          { key: 'type', label: 'Type', align: 'left' },
+                          { key: 'target_countries', label: 'Target', align: 'left' },
+                          { key: 'days_active', label: 'Actief', align: 'right' },
+                          { key: 'daily_budget', label: 'Budget/dag', align: 'right' },
+                          { key: 'total_cost', label: `Kosten (${period}d)`, align: 'right' },
+                          { key: 'roas', label: 'ROAS', align: 'right' },
+                          { key: '', label: 'ROAS 30d', align: 'center' },
+                          { key: 'total_conversions', label: 'Conversies', align: 'right' },
+                        ] as const).map(col => (
+                          <th key={col.label}
+                            onClick={() => col.key && handleSort(col.key)}
+                            className={`text-${col.align} text-[11px] font-medium text-text-tertiary px-4 py-2.5 ${col.key ? 'cursor-pointer hover:text-text-secondary select-none' : ''}`}>
+                            {col.label}
+                            {col.key && sortKey === col.key && (
+                              <span className="ml-0.5">{sortDir === 'desc' ? ' ↓' : ' ↑'}</span>
+                            )}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {active.map((c, i) => (
+                        <tr key={c.id}
+                          className={`border-b border-border-subtle transition-colors animate-row ${
+                            i % 2 === 0 ? 'bg-surface-1' : 'bg-surface-0/50'
+                          } hover:bg-surface-hover`}
+                          style={{ animationDelay: `${i * 30}ms` }}>
+                          <td className="px-4 py-2.5 text-[13px] font-medium text-text-primary max-w-[230px]">
+                            <Link href={`/campaigns/${c.id}`} className="truncate block hover:text-accent transition-colors">
+                              {c.name}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${typeColors[c.type] || 'bg-surface-3 text-text-tertiary'}`}>
+                              {c.type}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-[14px]">
+                            {targetFlags(c.target_countries, c.country)}
+                          </td>
+                          <td className="px-4 py-2.5 text-[13px] text-right text-text-tertiary">
+                            {c.days_active != null ? `${c.days_active}d` : '—'}
+                          </td>
+                          <td className="px-4 py-2.5 text-[13px] text-right text-text-secondary">{c.daily_budget ? formatCurrency(c.daily_budget) : '—'}</td>
+                          <td className="px-4 py-2.5 text-[13px] text-right font-medium text-text-primary">{formatCurrency(c.total_cost || 0)}</td>
+                          <td className={`px-4 py-2.5 text-[13px] text-right font-semibold ${(c.roas || 0) >= 3 ? 'text-success' : (c.roas || 0) >= 1 ? 'text-warning' : 'text-danger'}`}>
+                            {formatRoas(c.roas || 0)}
+                          </td>
+                          <td className="px-4 py-2.5 text-center">
+                            <RoasSparkline data={c.sparkline || []} />
+                          </td>
+                          <td className="px-4 py-2.5 text-[13px] text-right text-text-secondary">{Math.round(c.total_conversions || 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </div>
-          ) : filtered.length === 0 ? (
-            <div className="p-12 text-center text-text-tertiary text-[13px]">
-              Geen campagnes gevonden. Start een sync om data op te halen.
-            </div>
-          ) : (
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border-subtle">
-                  {([
-                    { key: 'name', label: 'Naam', align: 'left' },
-                    { key: 'type', label: 'Type', align: 'left' },
-                    { key: 'target_countries', label: 'Target', align: 'left' },
-                    { key: 'daily_budget', label: 'Budget/dag', align: 'right' },
-                    { key: 'total_cost', label: `Kosten (${period}d)`, align: 'right' },
-                    { key: 'roas', label: 'ROAS', align: 'right' },
-                    { key: '', label: 'ROAS 30d', align: 'center' },
-                    { key: 'total_conversions', label: 'Conversies', align: 'right' },
-                  ] as const).map(col => (
-                    <th key={col.label}
-                      onClick={() => col.key && handleSort(col.key)}
-                      className={`text-${col.align} text-[11px] font-medium text-text-tertiary px-4 py-2.5 ${col.key ? 'cursor-pointer hover:text-text-secondary select-none' : ''}`}>
-                      {col.label}
-                      {col.key && sortKey === col.key && (
-                        <span className="ml-0.5">{sortDir === 'desc' ? ' \u2193' : ' \u2191'}</span>
-                      )}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((c, i) => (
-                  <tr key={c.id}
-                    className={`border-b border-border-subtle transition-colors animate-row ${
-                      i % 2 === 0 ? 'bg-surface-1' : 'bg-surface-0/50'
-                    } hover:bg-surface-hover`}
-                    style={{ animationDelay: `${i * 30}ms` }}>
-                    <td className="px-4 py-2.5 text-[13px] font-medium text-text-primary max-w-[250px]">
-                      <Link href={`/campaigns/${c.id}`} className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: statusDotColor(c.status) }}
-                          title={c.status === 'ENABLED' ? 'Live' : c.status === 'PAUSED' ? 'Gepauzeerd' : c.status} />
-                        <span className="truncate">{c.name}</span>
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${typeColors[c.type] || 'bg-surface-3 text-text-tertiary'}`}>
-                        {c.type}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-[11px] text-text-secondary">
-                      {c.target_countries || (c.country ? countryFlag(c.country) : '\u2014')}
-                    </td>
-                    <td className="px-4 py-2.5 text-[13px] text-right text-text-secondary">{c.daily_budget ? formatCurrency(c.daily_budget) : '\u2014'}</td>
-                    <td className="px-4 py-2.5 text-[13px] text-right font-medium text-text-primary">{formatCurrency(c.total_cost || 0)}</td>
-                    <td className={`px-4 py-2.5 text-[13px] text-right font-semibold ${(c.roas || 0) >= 3 ? 'text-success' : (c.roas || 0) >= 1 ? 'text-warning' : 'text-danger'}`}>
-                      {formatRoas(c.roas || 0)}
-                    </td>
-                    <td className="px-4 py-2.5 text-center">
-                      <RoasSparkline data={c.sparkline || []} />
-                    </td>
-                    <td className="px-4 py-2.5 text-[13px] text-right text-text-secondary">{Math.round(c.total_conversions || 0)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+
+            {/* Inactieve campagnes */}
+            {inactive.length > 0 && (
+              <div>
+                <h2 className="text-[12px] font-semibold text-text-secondary mb-2 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-text-tertiary inline-block" />
+                  Inactief ({inactive.length})
+                </h2>
+                <div className="bg-surface-1 border border-border-subtle rounded-2xl overflow-hidden">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border-subtle">
+                        {([
+                          { key: 'name', label: 'Naam', align: 'left' },
+                          { key: 'type', label: 'Type', align: 'left' },
+                          { key: 'target_countries', label: 'Target', align: 'left' },
+                          { key: 'daily_budget', label: 'Budget/dag', align: 'right' },
+                          { key: 'total_cost', label: `Kosten (${period}d)`, align: 'right' },
+                          { key: 'roas', label: 'ROAS', align: 'right' },
+                          { key: '', label: 'ROAS 30d', align: 'center' },
+                          { key: 'total_conversions', label: 'Conversies', align: 'right' },
+                        ] as const).map(col => (
+                          <th key={col.label}
+                            onClick={() => col.key && handleSort(col.key)}
+                            className={`text-${col.align} text-[11px] font-medium text-text-tertiary px-4 py-2.5 ${col.key ? 'cursor-pointer hover:text-text-secondary select-none' : ''}`}>
+                            {col.label}
+                            {col.key && sortKey === col.key && (
+                              <span className="ml-0.5">{sortDir === 'desc' ? ' ↓' : ' ↑'}</span>
+                            )}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {inactive.map((c, i) => (
+                        <tr key={c.id}
+                          className={`border-b border-border-subtle transition-colors animate-row opacity-60 ${
+                            i % 2 === 0 ? 'bg-surface-1' : 'bg-surface-0/50'
+                          } hover:bg-surface-hover hover:opacity-100`}
+                          style={{ animationDelay: `${i * 30}ms` }}>
+                          <td className="px-4 py-2.5 text-[13px] font-medium text-text-primary max-w-[230px]">
+                            <Link href={`/campaigns/${c.id}`} className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full shrink-0"
+                                style={{ backgroundColor: statusDotColor(c.status) }}
+                                title={c.status === 'PAUSED' ? 'Gepauzeerd' : c.status} />
+                              <span className="truncate">{c.name}</span>
+                            </Link>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${typeColors[c.type] || 'bg-surface-3 text-text-tertiary'}`}>
+                              {c.type}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-[14px]">
+                            {targetFlags(c.target_countries, c.country)}
+                          </td>
+                          <td className="px-4 py-2.5 text-[13px] text-right text-text-secondary">{c.daily_budget ? formatCurrency(c.daily_budget) : '—'}</td>
+                          <td className="px-4 py-2.5 text-[13px] text-right font-medium text-text-primary">{formatCurrency(c.total_cost || 0)}</td>
+                          <td className={`px-4 py-2.5 text-[13px] text-right font-semibold ${(c.roas || 0) >= 3 ? 'text-success' : (c.roas || 0) >= 1 ? 'text-warning' : 'text-danger'}`}>
+                            {formatRoas(c.roas || 0)}
+                          </td>
+                          <td className="px-4 py-2.5 text-center">
+                            <RoasSparkline data={c.sparkline || []} />
+                          </td>
+                          <td className="px-4 py-2.5 text-[13px] text-right text-text-secondary">{Math.round(c.total_conversions || 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {active.length === 0 && inactive.length === 0 && (
+              <div className="bg-surface-1 border border-border-subtle rounded-2xl p-12 text-center text-text-tertiary text-[13px]">
+                Geen campagnes gevonden. Start een sync om data op te halen.
+              </div>
+            )}
+          </div>
+        )}
       </main>
     </>
   )
