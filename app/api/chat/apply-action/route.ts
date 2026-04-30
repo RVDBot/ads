@@ -357,20 +357,16 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
 
     case 'ad_text_change': {
       if (!details.google_adgroup_id) throw new Error('Ad group niet gevonden voor advertentietekst wijziging')
-      // Select ad.id — resource_name is unreliable via GAQL; build it from known parts instead
-      const adRows = await customer.query(`
-        SELECT ad_group_ad.ad.id
-        FROM ad_group_ad
-        WHERE ad_group.id = ${details.google_adgroup_id}
-        AND ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD'
-        AND ad_group_ad.status != 'REMOVED'
+      // Use locally synced ads table — live GAQL query for resource_name is unreliable
+      const adRow = getDb().prepare(`
+        SELECT a.google_ad_id
+        FROM ads a
+        JOIN ad_groups ag ON ag.id = a.adgroup_id
+        WHERE ag.google_adgroup_id = ? AND a.status != 'REMOVED'
         LIMIT 1
-      `)
-      if (!adRows.length || !(adRows[0] as any)?.ad_group_ad?.ad?.id) {
-        throw new Error('Geen actieve RSA gevonden in deze ad group')
-      }
-      const adId = (adRows[0] as any).ad_group_ad.ad.id
-      const resourceName = `customers/${details.customer_id}/adGroupAds/${details.google_adgroup_id}~${adId}`
+      `).get(String(details.google_adgroup_id)) as { google_ad_id: string } | undefined
+      if (!adRow) throw new Error('Geen actieve advertentie gevonden voor deze ad group — voer eerst een sync uit')
+      const resourceName = `customers/${details.customer_id}/adGroupAds/${details.google_adgroup_id}~${adRow.google_ad_id}`
       const headlines = Array.isArray(details.headlines)
         ? (details.headlines as string[]).map(t => ({ text: t }))
         : []
