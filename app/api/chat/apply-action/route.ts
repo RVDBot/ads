@@ -357,18 +357,20 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
 
     case 'ad_text_change': {
       if (!details.google_adgroup_id) throw new Error('Ad group niet gevonden voor advertentietekst wijziging')
+      // Select ad.id — resource_name is unreliable via GAQL; build it from known parts instead
       const adRows = await customer.query(`
-        SELECT ad_group_ad.resource_name
+        SELECT ad_group_ad.ad.id
         FROM ad_group_ad
         WHERE ad_group.id = ${details.google_adgroup_id}
         AND ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD'
         AND ad_group_ad.status != 'REMOVED'
         LIMIT 1
       `)
-      if (!adRows.length || !(adRows[0] as any)?.ad_group_ad?.resource_name) {
+      if (!adRows.length || !(adRows[0] as any)?.ad_group_ad?.ad?.id) {
         throw new Error('Geen actieve RSA gevonden in deze ad group')
       }
-      const resourceName = (adRows[0] as any).ad_group_ad.resource_name as string
+      const adId = (adRows[0] as any).ad_group_ad.ad.id
+      const resourceName = `customers/${details.customer_id}/adGroupAds/${details.google_adgroup_id}~${adId}`
       const headlines = Array.isArray(details.headlines)
         ? (details.headlines as string[]).map(t => ({ text: t }))
         : []
