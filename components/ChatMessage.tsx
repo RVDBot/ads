@@ -136,10 +136,12 @@ function ActionCard({ action, messageId, actionIndex, onLocalUpdate }: {
   onLocalUpdate?: (status: string) => void
 }) {
   const [loading, setLoading] = useState('')
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
 
   async function handleApply() {
     if (!messageId) return
     setLoading('apply')
+    setResult(null)
     try {
       const res = await apiFetch('/api/chat/apply-action', {
         method: 'POST',
@@ -147,8 +149,18 @@ function ActionCard({ action, messageId, actionIndex, onLocalUpdate }: {
         body: JSON.stringify({ message_id: messageId, action_index: actionIndex }),
       })
       const data = await res.json()
-      onLocalUpdate?.(data.success ? 'applied' : 'failed')
-    } catch {
+      if (res.ok && data.success) {
+        const note = data.verification_note
+        setResult({ ok: true, text: note ? `Toegepast (verificatie mislukt: ${note})` : 'Actie succesvol toegepast' })
+        onLocalUpdate?.('applied')
+      } else {
+        const errorText = data.error || `HTTP ${res.status}`
+        setResult({ ok: false, text: errorText })
+        onLocalUpdate?.('failed')
+      }
+    } catch (e) {
+      const errorText = e instanceof Error ? e.message : 'Verbindingsfout'
+      setResult({ ok: false, text: errorText })
       onLocalUpdate?.('failed')
     } finally {
       setLoading('')
@@ -210,6 +222,11 @@ function ActionCard({ action, messageId, actionIndex, onLocalUpdate }: {
             className="px-3 py-1 text-text-tertiary text-[11px] font-medium rounded-lg hover:bg-surface-2 disabled:opacity-50">
             {loading === 'dismiss' ? '...' : 'Negeer'}
           </button>
+        </div>
+      )}
+      {result && (
+        <div className={`mt-2 text-[11px] px-3 py-2 rounded-lg leading-snug ${result.ok ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'}`}>
+          {result.ok ? '✓ ' : '✗ '}{result.text}
         </div>
       )}
     </div>
