@@ -293,7 +293,6 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
             onInput={handleInput}
             onKeyDown={handleKeyDown}
             onSend={handleSend}
-            onActionApplied={refreshMessages}
           />
         </div>
       </div>
@@ -312,14 +311,13 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
           onInput={handleInput}
           onKeyDown={handleKeyDown}
           onSend={handleSend}
-          onActionApplied={refreshMessages}
         />
       </div>
     </>
   )
 }
 
-function PanelContent({ title, messages, input, streaming, toolStatus, messagesEndRef, textareaRef, onClose, onInput, onKeyDown, onSend, onActionApplied }: {
+function PanelContent({ title, messages, input, streaming, toolStatus, messagesEndRef, textareaRef, onClose, onInput, onKeyDown, onSend }: {
   title?: string
   messages: Message[]
   input: string
@@ -331,7 +329,6 @@ function PanelContent({ title, messages, input, streaming, toolStatus, messagesE
   onInput: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
   onSend: () => void
-  onActionApplied: () => void
 }) {
   return (
     <>
@@ -370,7 +367,6 @@ function PanelContent({ title, messages, input, streaming, toolStatus, messagesE
             role={msg.role}
             content={msg.content}
             proposedActions={msg.proposedActions}
-            onActionApplied={onActionApplied}
           />
         ))}
         {toolStatus && (

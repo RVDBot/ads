@@ -16,7 +16,6 @@ interface ChatMessageProps {
   role: 'user' | 'assistant'
   content: string
   proposedActions?: ProposedAction[]
-  onActionApplied?: () => void
 }
 
 const typeLabels: Record<string, string> = {
@@ -75,16 +74,11 @@ function FormattedText({ text }: { text: string }) {
   )
 }
 
-export default function ChatMessage({ id, role, content, proposedActions, onActionApplied }: ChatMessageProps) {
+export default function ChatMessage({ id, role, content, proposedActions }: ChatMessageProps) {
+  // Initialise once from props — never overwrite from props again.
+  // Statuses applied during this session are kept in local state;
+  // statuses from previous sessions are loaded via useState initialiser.
   const [localActions, setLocalActions] = useState<ProposedAction[] | undefined>(proposedActions)
-
-  // Sync with props when they change (e.g. after refreshMessages)
-  const actionsKey = JSON.stringify(proposedActions)
-  const [prevKey, setPrevKey] = useState(actionsKey)
-  if (actionsKey !== prevKey) {
-    setPrevKey(actionsKey)
-    setLocalActions(proposedActions)
-  }
 
   function handleLocalUpdate(index: number, status: string) {
     setLocalActions(prev => {
@@ -93,7 +87,6 @@ export default function ChatMessage({ id, role, content, proposedActions, onActi
       updated[index] = { ...updated[index], status }
       return updated
     })
-    onActionApplied?.()
   }
 
   if (role === 'user') {
