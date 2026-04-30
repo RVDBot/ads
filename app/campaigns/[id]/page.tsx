@@ -104,8 +104,8 @@ const PERIODS = [
 ]
 
 function statusDotColor(status: string): string {
-  if (status === 'ENABLED') return '#0f9960'
-  if (status === 'PAUSED') return '#8b9098'
+  if (status === 'ENABLED' || status === '2') return '#0f9960'
+  if (status === 'PAUSED' || status === '3') return '#8b9098'
   return '#dc2626'
 }
 
@@ -587,7 +587,7 @@ export default function CampaignDetailPage() {
                     </div>
                     <div className="flex items-center gap-1 mt-auto pt-1">
                       <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: statusDotColor(ad.status) }} />
-                      <span className="text-[10px] text-text-tertiary">{ad.status === 'ENABLED' ? 'Live' : 'Gepauzeerd'}</span>
+                      <span className="text-[10px] text-text-tertiary">{(ad.status === 'ENABLED' || ad.status === '2') ? 'Live' : (ad.status === 'PAUSED' || ad.status === '3') ? 'Gepauzeerd' : ad.status}</span>
                     </div>
                   </div>
                 )
