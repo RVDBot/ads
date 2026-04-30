@@ -319,10 +319,11 @@ export default function CampaignDetailPage() {
   const [days, setDays] = useState(30)
   const [showAllAds, setShowAllAds] = useState(false)
   const [showAllKeywords, setShowAllKeywords] = useState(false)
+  const [adStatus, setAdStatus] = useState('ENABLED')
 
   useEffect(() => {
     setLoading(true)
-    apiFetch(`/api/campaigns/${id}?days=${days}`)
+    apiFetch(`/api/campaigns/${id}?days=${days}&adStatus=${adStatus}`)
       .then(r => r.json())
       .then(d => {
         setCampaign(d.campaign)
@@ -335,7 +336,7 @@ export default function CampaignDetailPage() {
         setLoading(false)
       })
       .catch(() => setLoading(false))
-  }, [id, days])
+  }, [id, days, adStatus])
 
   const isShopping = campaign?.type === 'SHOPPING' || campaign?.type === 'PERFORMANCE_MAX'
 
@@ -547,12 +548,27 @@ export default function CampaignDetailPage() {
         )}
 
         {/* Ads (Search campaigns only) */}
-        {!isShopping && ads.length > 0 && (
+        {!isShopping && (ads.length > 0 || adStatus !== 'ENABLED') && (
           <div className="bg-surface-1 border border-border-subtle rounded-2xl overflow-hidden mb-5">
-            <div className="px-4 py-3 border-b border-border-subtle">
+            <div className="px-4 py-3 border-b border-border-subtle flex items-center justify-between gap-3">
               <span className="text-[13px] font-semibold text-text-primary">Advertenties ({ads.length})</span>
+              <select
+                value={adStatus}
+                onChange={e => { setAdStatus(e.target.value); setShowAllAds(false) }}
+                className="text-[11px] bg-surface-2 border border-border-subtle rounded-lg px-2 py-1 text-text-secondary outline-none cursor-pointer"
+              >
+                <option value="ENABLED">Actief</option>
+                <option value="PAUSED">Gepauzeerd</option>
+                <option value="REMOVED">Verwijderd</option>
+                <option value="ALL">Alle</option>
+              </select>
             </div>
-            <div className="p-4 grid grid-cols-4 gap-3">
+            {ads.length === 0 && (
+              <div className="px-4 py-6 text-center text-[12px] text-text-tertiary">
+                Geen advertenties gevonden met status "{adStatus === 'PAUSED' ? 'Gepauzeerd' : adStatus === 'REMOVED' ? 'Verwijderd' : adStatus}".
+              </div>
+            )}
+            {ads.length > 0 && <div className="p-4 grid grid-cols-4 gap-3">
               {(showAllAds ? ads : ads.slice(0, 12)).map(ad => {
                 const headlines = JSON.parse(ad.headlines || '[]') as string[]
                 const descriptions = JSON.parse(ad.descriptions || '[]') as string[]
@@ -576,7 +592,7 @@ export default function CampaignDetailPage() {
                   </div>
                 )
               })}
-            </div>
+            </div>}
             {ads.length > 12 && (
               <div className="px-4 pb-4">
                 <button

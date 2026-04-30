@@ -61,11 +61,15 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     GROUP BY product_title ORDER BY total_cost DESC LIMIT 50
   `).all(id, days)
 
+  const adStatus = req.nextUrl.searchParams.get('adStatus') || 'ENABLED'
+  const adStatusFilter = adStatus === 'ALL'
+    ? '' : `AND a.status = '${['ENABLED', 'PAUSED', 'REMOVED'].includes(adStatus) ? adStatus : 'ENABLED'}'`
+
   const ads = db.prepare(`
     SELECT a.id, a.headlines, a.descriptions, a.status, ag.name as adgroup_name
     FROM ads a
     JOIN ad_groups ag ON ag.id = a.adgroup_id
-    WHERE ag.campaign_id = ? AND a.status != 'REMOVED'
+    WHERE ag.campaign_id = ? ${adStatusFilter}
     ORDER BY ag.name, a.id
   `).all(id)
 
