@@ -458,34 +458,25 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         throw new Error('Geen final_url beschikbaar voor vervanging advertentie — geef final_url mee in de actie details')
       }
 
-      // Remove ALL active ads in this ad group — previous failed attempts may have left extras
-      const liveAds = await customer.query(`
-        SELECT ad_group_ad.ad.id
-        FROM ad_group_ad
-        WHERE ad_group.id = ${details.google_adgroup_id}
-          AND ad_group_ad.status != 'REMOVED'
-      `)
-      log('info', 'google-ads', 'Actieve ads gevonden voor verwijdering', {
+      // Replace existing ad: remove the known ad from DB, then create new
+      const resourceName = `customers/${details.customer_id}/adGroupAds/${details.google_adgroup_id}~${adRow.google_ad_id}`
+      log('info', 'google-ads', 'Bestaande RSA vervangen (remove + create)', {
         google_adgroup_id: details.google_adgroup_id,
-        count: liveAds.length,
+        google_ad_id: adRow.google_ad_id,
         final_urls: replaceFinalUrls,
         headline_count: headlines.length,
         description_count: descriptions.length,
       })
-      for (const row of liveAds) {
-        const adId = (row as any).ad_group_ad?.ad?.id
-        if (!adId) continue
-        const rn = `customers/${details.customer_id}/adGroupAds/${details.google_adgroup_id}~${adId}`
-        try {
-          await customer.mutateResources([{
-            entity: 'ad_group_ad' as const,
-            operation: 'remove' as const,
-            resource: rn as any,
-          }])
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e)
-          if (!/CANNOT_OPERATE_ON_REMOVED/i.test(msg)) throw e
-        }
+      try {
+        await customer.mutateResources([{
+          entity: 'ad_group_ad' as const,
+          operation: 'remove' as const,
+          resource: resourceName as any,
+        }])
+      } catch (removeErr) {
+        const msg = removeErr instanceof Error ? removeErr.message : String(removeErr)
+        if (!/CANNOT_OPERATE_ON_REMOVED/i.test(msg)) throw removeErr
+        log('info', 'google-ads', 'Ad al verwijderd, remove stap overgeslagen', { resourceName })
       }
 
       // Create new ad
