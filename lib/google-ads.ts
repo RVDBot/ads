@@ -453,7 +453,6 @@ export async function syncAds() {
       ad_group.id
     FROM ad_group_ad
     WHERE ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD'
-    AND ad_group_ad.status != 'REMOVED'
   `)
 
   const findAdGroup = db.prepare('SELECT id FROM ad_groups WHERE google_adgroup_id = ?')
