@@ -61,5 +61,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     GROUP BY product_title ORDER BY total_cost DESC LIMIT 50
   `).all(id, days)
 
-  return NextResponse.json({ campaign, metrics, adGroups, keywords, searchTerms, products })
+  const ads = db.prepare(`
+    SELECT a.id, a.headlines, a.descriptions, a.status, ag.name as adgroup_name
+    FROM ads a
+    JOIN ad_groups ag ON ag.id = a.adgroup_id
+    WHERE ag.campaign_id = ? AND a.status != 'REMOVED'
+    ORDER BY ag.name, a.id
+  `).all(id)
+
+  return NextResponse.json({ campaign, metrics, adGroups, keywords, searchTerms, products, ads })
 }

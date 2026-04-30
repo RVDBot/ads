@@ -58,6 +58,14 @@ interface Keyword {
   total_value: number
 }
 
+interface Ad {
+  id: number
+  headlines: string
+  descriptions: string
+  status: string
+  adgroup_name: string
+}
+
 interface SearchTerm {
   search_term: string
   cost: number
@@ -304,10 +312,13 @@ export default function CampaignDetailPage() {
   const [metrics, setMetrics] = useState<DailyMetric[]>([])
   const [adGroups, setAdGroups] = useState<AdGroup[]>([])
   const [keywords, setKeywords] = useState<Keyword[]>([])
+  const [ads, setAds] = useState<Ad[]>([])
   const [searchTerms, setSearchTerms] = useState<SearchTerm[]>([])
   const [products, setProducts] = useState<ProductMetric[]>([])
   const [loading, setLoading] = useState(true)
   const [days, setDays] = useState(30)
+  const [showAllAds, setShowAllAds] = useState(false)
+  const [showAllKeywords, setShowAllKeywords] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -318,6 +329,7 @@ export default function CampaignDetailPage() {
         setMetrics(d.metrics || [])
         setAdGroups(d.adGroups || [])
         setKeywords(d.keywords || [])
+        setAds(d.ads || [])
         setSearchTerms(d.searchTerms || [])
         setProducts(d.products || [])
         setLoading(false)
@@ -534,6 +546,50 @@ export default function CampaignDetailPage() {
           </div>
         )}
 
+        {/* Ads (Search campaigns only) */}
+        {!isShopping && ads.length > 0 && (
+          <div className="bg-surface-1 border border-border-subtle rounded-2xl overflow-hidden mb-5">
+            <div className="px-4 py-3 border-b border-border-subtle">
+              <span className="text-[13px] font-semibold text-text-primary">Advertenties ({ads.length})</span>
+            </div>
+            <div className="p-4 grid grid-cols-4 gap-3">
+              {(showAllAds ? ads : ads.slice(0, 12)).map(ad => {
+                const headlines = JSON.parse(ad.headlines || '[]') as string[]
+                const descriptions = JSON.parse(ad.descriptions || '[]') as string[]
+                return (
+                  <div key={ad.id} className="bg-surface-0 border border-border-subtle rounded-xl p-3 flex flex-col gap-1.5">
+                    <div className="text-[10px] font-medium text-text-tertiary truncate">{ad.adgroup_name}</div>
+                    <div className="space-y-0.5">
+                      {headlines.slice(0, 3).map((h, i) => (
+                        <div key={i} className="text-[12px] font-semibold text-accent leading-snug truncate">{h}</div>
+                      ))}
+                    </div>
+                    <div className="space-y-0.5">
+                      {descriptions.slice(0, 2).map((d, i) => (
+                        <div key={i} className="text-[11px] text-text-secondary leading-snug line-clamp-2">{d}</div>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1 mt-auto pt-1">
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: statusDotColor(ad.status) }} />
+                      <span className="text-[10px] text-text-tertiary">{ad.status === 'ENABLED' ? 'Live' : 'Gepauzeerd'}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {ads.length > 12 && (
+              <div className="px-4 pb-4">
+                <button
+                  onClick={() => setShowAllAds(v => !v)}
+                  className="w-full py-2 text-[12px] font-medium text-text-secondary hover:text-text-primary border border-border-subtle rounded-lg hover:bg-surface-hover transition-colors"
+                >
+                  {showAllAds ? `Minder tonen` : `Toon alle ${ads.length} advertenties`}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Keywords (Search campaigns only) */}
         {!isShopping && kwWithRoas.length > 0 && (
           <div className="bg-surface-1 border border-border-subtle rounded-2xl overflow-hidden mb-5">
@@ -555,7 +611,7 @@ export default function CampaignDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {kwWithRoas.map((k, i) => {
+                {(showAllKeywords ? kwWithRoas : kwWithRoas.slice(0, 25)).map((k, i) => {
                   const mt = MATCH_TYPE_MAP[k.match_type] || k.match_type
                   return (
                     <tr key={k.id} className={`border-b border-border-subtle last:border-0 transition-colors ${i % 2 === 0 ? 'bg-surface-1' : 'bg-surface-0/50'} hover:bg-surface-hover`}>
@@ -584,6 +640,16 @@ export default function CampaignDetailPage() {
                 })}
               </tbody>
             </table>
+            {kwWithRoas.length > 25 && (
+              <div className="px-4 py-3 border-t border-border-subtle">
+                <button
+                  onClick={() => setShowAllKeywords(v => !v)}
+                  className="w-full py-2 text-[12px] font-medium text-text-secondary hover:text-text-primary border border-border-subtle rounded-lg hover:bg-surface-hover transition-colors"
+                >
+                  {showAllKeywords ? `Minder tonen` : `Toon alle ${kwWithRoas.length} zoekwoorden`}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
