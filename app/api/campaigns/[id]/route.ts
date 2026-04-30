@@ -62,8 +62,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   `).all(id, days)
 
   const adStatus = req.nextUrl.searchParams.get('adStatus') || 'ENABLED'
+  // Map string status to also match numeric values stored before normalization fix
+  const adStatusNumeric: Record<string, string> = { ENABLED: '2', PAUSED: '3', REMOVED: '4' }
   const adStatusFilter = adStatus === 'ALL'
-    ? '' : `AND a.status = '${['ENABLED', 'PAUSED', 'REMOVED'].includes(adStatus) ? adStatus : 'ENABLED'}'`
+    ? ''
+    : `AND (a.status = '${adStatus}' OR a.status = '${adStatusNumeric[adStatus] ?? adStatus}')`
 
   const ads = db.prepare(`
     SELECT a.id, a.headlines, a.descriptions, a.status, ag.name as adgroup_name

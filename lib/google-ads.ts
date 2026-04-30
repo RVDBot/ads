@@ -477,7 +477,7 @@ export async function syncAds() {
         String(row.ad_group_ad?.ad?.id), ag.id,
         JSON.stringify(headlines), JSON.stringify(descriptions),
         JSON.stringify(finalUrls),
-        String(row.ad_group_ad?.status || 'ENABLED')
+        CAMPAIGN_STATUS_MAP[String(row.ad_group_ad?.status || 'ENABLED')] || String(row.ad_group_ad?.status || 'ENABLED')
       )
     }
   })
