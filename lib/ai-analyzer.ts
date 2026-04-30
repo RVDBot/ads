@@ -250,7 +250,9 @@ keyword_add en keyword_negative zijn alleen geldig voor Search campagnes (type=S
 BELANGRIJK: Bij ad_text_change suggesties:
 - Je krijgt de HUIDIGE headlines en descriptions per adgroup. Verbeter deze, niet verzinnen.
 - Gebruik ALTIJD de echte productnamen en eigenschappen uit de Merchant Center data en de product-campagne koppelingen.
-- Headlines max 30 tekens, descriptions max 90 tekens (Google Ads limieten).
+- Headlines STRIKT max 30 tekens INCLUSIEF SPATIES. Tel elk karakter. Te lang = afgekeurd door Google.
+- Descriptions STRIKT max 90 tekens INCLUSIEF SPATIES. Tel elk karakter vóór opname. Te lang = afgekeurd door Google.
+- Controleer altijd: len(description) ≤ 90. Voorbeeld: "Bestel nu met gratis verzending in NL" = 37 tekens ✓. "Koop nu de beste speedropes voor CrossFit en fitness training bij Speed Rope Shop NL" = 84 tekens ✓.
 - Schrijf in de taal van het land van de campagne (NL=Nederlands, DE=Duits, FR=Frans, ES=Spaans, IT=Italiaans).
 - Verzin NOOIT productkenmerken. Gebruik alleen wat in de productdata staat.
 
@@ -284,7 +286,7 @@ Gebruik ALTIJD de exacte campagne- en ad group namen uit de data hierboven. Het 
 - **ad_text_change**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "headlines": ["headline1"], "descriptions": ["desc1"], "final_url": "https://..." } — final_url is verplicht: gebruik de URL van een bestaande ad in dezelfde campagne
 - **adgroup_create**: { "campaign_name": "exacte naam", "adgroup_name": "nieuwe naam", "cpc_bid": 0.50, "headlines": ["h1","h2","h3"], "descriptions": ["d1","d2"], "final_url": "https://..." } — gebruik dit voor nieuwe ad groups, NIET ad_text_change
 - **new_campaign**: { "campaign_name": "voorgestelde naam", "country": "nl", "type": "SEARCH|SHOPPING", "daily_budget": 10.0, "keywords": ["kw1"], "headlines": ["headline1", "headline2", "headline3"], "descriptions": ["desc1", "desc2"] }
-  (SEARCH: verplicht 3+ headlines max 30 tekens, 2+ descriptions max 90 tekens, in de taal van het land. SHOPPING: headlines/descriptions weglaten.)
+  (SEARCH: verplicht 3+ headlines max 30 tekens INCL. SPATIES, 2+ descriptions max 90 tekens INCL. SPATIES — tel elk karakter, in de taal van het land. SHOPPING: headlines/descriptions weglaten.)
 - **schedule_change**: { "campaign_name": "exacte naam", "schedule": "beschrijving van wijziging" }`
 
   const userMessage = `## Campagnes (laatste ${period} dagen)
@@ -439,7 +441,7 @@ Antwoord ALLEEN met een JSON object (GEEN markdown code fences). Max 10 findings
 
 ## Details-velden per type
 - **new_campaign**: { "campaign_name": "naam", "country": "nl", "type": "SEARCH|SHOPPING", "daily_budget": 10.0, "keywords": ["kw1"], "headlines": ["headline1", "headline2", "headline3"], "descriptions": ["desc1", "desc2"] }
-  (SEARCH: verplicht 3+ headlines max 30 tekens, 2+ descriptions max 90 tekens, in de taal van het land. SHOPPING: headlines/descriptions weglaten.)
+  (SEARCH: verplicht 3+ headlines max 30 tekens INCL. SPATIES, 2+ descriptions max 90 tekens INCL. SPATIES — tel elk karakter, in de taal van het land. SHOPPING: headlines/descriptions weglaten.)
 - **keyword_add**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "keywords": ["kw1", "kw2"], "match_type": "PHRASE|EXACT|BROAD" }
 - **market_expansion**: { "target_country": "at", "source_country": "de", "rationale": "uitleg", "recommended_budget": 10.0, "recommended_campaign_type": "SEARCH|SHOPPING" }`
 
@@ -542,7 +544,7 @@ Antwoord ALLEEN met een JSON object (GEEN markdown code fences). Max 8 findings,
 
 ## Details-velden per type
 - **brand_campaign**: { "campaign_name": "voorgestelde naam", "country": "nl", "daily_budget": 5.0, "keywords": ["speedrope shop", "speedropeshop"], "headlines": ["headline1", "headline2", "headline3"], "descriptions": ["desc1", "desc2"], "rationale": "uitleg" }
-  (Verplicht 3+ headlines max 30 tekens, 2+ descriptions max 90 tekens, in de taal van het land. Gebruik de merknaam en onderscheidende kenmerken.)
+  (Verplicht 3+ headlines max 30 tekens INCL. SPATIES, 2+ descriptions max 90 tekens INCL. SPATIES — tel elk karakter, in de taal van het land. Gebruik de merknaam en onderscheidende kenmerken.)
 - **display_campaign**: { "campaign_name": "voorgestelde naam", "country": "nl", "daily_budget": 10.0, "target_audience": "beschrijving doelgroep", "rationale": "uitleg" }
 - **youtube_campaign**: { "campaign_name": "voorgestelde naam", "country": "nl", "daily_budget": 15.0, "video_concept": "beschrijving video type", "rationale": "uitleg" }`
 

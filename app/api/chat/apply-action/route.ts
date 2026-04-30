@@ -378,13 +378,13 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         LIMIT 1
       `).get(String(details.google_adgroup_id)) as { google_ad_id: string; status: string; final_urls: string } | undefined
 
-      // Google Ads limits: headlines max 30 chars, descriptions max 90 chars
+      // Google Ads limits: headlines max 30 chars, descriptions max 90 chars (including spaces)
       const headlines = (Array.isArray(details.headlines) ? details.headlines as string[] : [])
         .slice(0, 15)
-        .map(t => ({ text: String(t).slice(0, 30) }))
+        .map(t => ({ text: String(t).slice(0, 30).trimEnd() }))
       const descriptions = (Array.isArray(details.descriptions) ? details.descriptions as string[] : [])
         .slice(0, 4)
-        .map(t => ({ text: String(t).slice(0, 90) }))
+        .map(t => ({ text: String(t).slice(0, 90).trimEnd() }))
 
       if (!adRow) {
         // No existing ad — create a new RSA
