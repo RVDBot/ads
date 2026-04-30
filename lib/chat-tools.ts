@@ -197,6 +197,7 @@ export function executeTool(name: string, input: Record<string, unknown>): { res
         type: input.type as string,
         title: input.title as string,
         details: input.details as Record<string, unknown>,
+        status: 'pending',
       }
       return {
         result: `Actie voorgesteld aan gebruiker: ${action.title}`,

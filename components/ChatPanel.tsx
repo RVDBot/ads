@@ -47,19 +47,25 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
   const [streaming, setStreaming] = useState(false)
   const [toolStatus, setToolStatus] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const prevMsgCount = useRef(0)
 
   const scrollToBottom = useCallback((instant = false) => {
-    messagesEndRef.current?.scrollIntoView({ behavior: instant ? 'instant' : 'smooth' })
+    if (instant && scrollContainerRef.current) {
+      // Direct container scroll — reliable regardless of render timing
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [])
 
   useEffect(() => {
     const wasEmpty = prevMsgCount.current === 0
     prevMsgCount.current = messages.length
     if (wasEmpty && messages.length > 0) {
-      // Initial load: jump instantly after the DOM has painted
-      requestAnimationFrame(() => scrollToBottom(true))
+      // Initial load: scroll instantly. Use double-rAF so layout is complete.
+      requestAnimationFrame(() => requestAnimationFrame(() => scrollToBottom(true)))
     } else {
       scrollToBottom()
     }
@@ -284,6 +290,7 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
             input={input}
             streaming={streaming}
             toolStatus={toolStatus}
+            scrollContainerRef={scrollContainerRef}
             messagesEndRef={messagesEndRef}
             textareaRef={textareaRef}
             onClose={onClose}
@@ -303,6 +310,7 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
           input={input}
           streaming={streaming}
           toolStatus={toolStatus}
+          scrollContainerRef={scrollContainerRef}
           messagesEndRef={messagesEndRef}
           textareaRef={textareaRef}
           onClose={onClose}
@@ -316,12 +324,13 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
   )
 }
 
-function PanelContent({ title, messages, input, streaming, toolStatus, messagesEndRef, textareaRef, onClose, onClear, onInput, onKeyDown, onSend }: {
+function PanelContent({ title, messages, input, streaming, toolStatus, scrollContainerRef, messagesEndRef, textareaRef, onClose, onClear, onInput, onKeyDown, onSend }: {
   title?: string
   messages: Message[]
   input: string
   streaming: boolean
   toolStatus: string | null
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>
   messagesEndRef: React.RefObject<HTMLDivElement | null>
   textareaRef: React.RefObject<HTMLTextAreaElement | null>
   onClose: () => void
@@ -362,7 +371,7 @@ function PanelContent({ title, messages, input, streaming, toolStatus, messagesE
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
         {messages.length === 0 && (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-[12px] text-text-tertiary text-center">
