@@ -467,12 +467,21 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         description_count: descriptions.length,
       })
 
-      // Remove old ad — status REMOVED is not allowed via update; use remove operation
-      await customer.mutateResources([{
-        entity: 'ad_group_ad' as const,
-        operation: 'remove' as const,
-        resource: resourceName as any,
-      }])
+      // Remove old ad — skip if already removed (e.g. previous attempt removed it but create failed)
+      try {
+        await customer.mutateResources([{
+          entity: 'ad_group_ad' as const,
+          operation: 'remove' as const,
+          resource: resourceName as any,
+        }])
+      } catch (removeErr) {
+        const msg = removeErr instanceof Error ? removeErr.message : JSON.stringify(removeErr)
+        if (/CANNOT_OPERATE_ON_REMOVED|already.*remov/i.test(msg)) {
+          log('info', 'google-ads', 'Ad al verwijderd, remove stap overgeslagen', { resourceName })
+        } else {
+          throw removeErr
+        }
+      }
 
       // Create new ad
       return customer.mutateResources([{
