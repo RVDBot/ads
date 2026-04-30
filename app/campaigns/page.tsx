@@ -228,7 +228,9 @@ export default function CampaignsPage() {
                             </span>
                           </td>
                           <td className="px-4 py-2.5 text-[14px]">
-                            {targetFlags(c.target_countries, c.country)}
+                            {c.target_countries
+                              ? targetFlags(c.target_countries)
+                              : <span className="inline-block w-2.5 h-2.5 rounded-full bg-danger" title="Geen geo-targeting ingesteld — sync uitvoeren of targeting instellen in Google Ads" />}
                           </td>
                           <td className="px-4 py-2.5 text-[13px] text-right text-text-tertiary">
                             {c.days_active != null ? `${c.days_active}d` : '—'}
@@ -303,7 +305,9 @@ export default function CampaignsPage() {
                             </span>
                           </td>
                           <td className="px-4 py-2.5 text-[14px]">
-                            {targetFlags(c.target_countries, c.country)}
+                            {c.target_countries
+                              ? targetFlags(c.target_countries)
+                              : <span className="inline-block w-2.5 h-2.5 rounded-full bg-danger" title="Geen geo-targeting ingesteld — sync uitvoeren of targeting instellen in Google Ads" />}
                           </td>
                           <td className="px-4 py-2.5 text-[13px] text-right text-text-secondary">{c.daily_budget ? formatCurrency(c.daily_budget) : '—'}</td>
                           <td className="px-4 py-2.5 text-[13px] text-right font-medium text-text-primary">{formatCurrency(c.total_cost || 0)}</td>
