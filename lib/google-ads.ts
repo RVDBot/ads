@@ -234,6 +234,7 @@ export async function syncAdGroups() {
       ad_group.id,
       ad_group.name,
       ad_group.status,
+      ad_group.cpc_bid_micros,
       campaign.id
     FROM ad_group
     WHERE ad_group.status != 'REMOVED'
@@ -241,10 +242,10 @@ export async function syncAdGroups() {
 
   const findCampaign = db.prepare('SELECT id FROM campaigns WHERE google_campaign_id = ?')
   const stmt = db.prepare(`
-    INSERT INTO ad_groups (google_adgroup_id, campaign_id, name, status)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO ad_groups (google_adgroup_id, campaign_id, name, status, cpc_bid)
+    VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(google_adgroup_id) DO UPDATE SET
-      name = excluded.name, status = excluded.status
+      name = excluded.name, status = excluded.status, cpc_bid = excluded.cpc_bid
   `)
 
   let skipped = 0
@@ -253,7 +254,8 @@ export async function syncAdGroups() {
       const camp = findCampaign.get(String(row.campaign?.id)) as { id: number } | undefined
       if (!camp) { skipped++; continue }
       const agStatus = CAMPAIGN_STATUS_MAP[String(row.ad_group?.status || 'ENABLED')] || String(row.ad_group?.status || 'ENABLED')
-      stmt.run(String(row.ad_group?.id), camp.id, row.ad_group?.name, agStatus)
+      const cpcBid = row.ad_group?.cpc_bid_micros ? Number(row.ad_group.cpc_bid_micros) / 1_000_000 : null
+      stmt.run(String(row.ad_group?.id), camp.id, row.ad_group?.name, agStatus, cpcBid)
     }
   })
   tx()

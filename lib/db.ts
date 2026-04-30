@@ -64,6 +64,7 @@ function initSchema(db: Database.Database) {
       google_adgroup_id TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'ENABLED',
+      cpc_bid REAL,
       FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
     );
 
@@ -283,4 +284,9 @@ function initSchema(db: Database.Database) {
 
   try { db.exec("ALTER TABLE ai_analyses ADD COLUMN category TEXT NOT NULL DEFAULT 'optimization'") } catch {}
   try { db.exec("ALTER TABLE ai_suggestions ADD COLUMN category TEXT NOT NULL DEFAULT 'optimization'") } catch {}
+
+  const agCols = db.prepare("PRAGMA table_info(ad_groups)").all() as Array<{ name: string }>
+  if (!agCols.some(c => c.name === 'cpc_bid')) {
+    db.exec('ALTER TABLE ad_groups ADD COLUMN cpc_bid REAL')
+  }
 }

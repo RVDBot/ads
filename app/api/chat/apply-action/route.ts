@@ -173,6 +173,13 @@ async function verifyAction(actionType: string, details: Record<string, unknown>
   }
 }
 
+// google-ads-api requires numeric enum values for match_type (not strings)
+// KeywordMatchType: EXACT=2, PHRASE=3, BROAD=4
+const MATCH_TYPE_ENUM: Record<string, number> = { EXACT: 2, PHRASE: 3, BROAD: 4 }
+function toMatchTypeEnum(val: unknown): number {
+  return MATCH_TYPE_ENUM[String(val || '').toUpperCase()] ?? 3
+}
+
 async function applyAction(actionType: string, details: Record<string, unknown>): Promise<unknown> {
   const customer = getGoogleAdsClient()
 
@@ -206,7 +213,7 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         resource: {
           campaign: `customers/${details.customer_id}/campaigns/${details.google_campaign_id}`,
           negative: true,
-          keyword: { text: details.keyword as string, match_type: (details.match_type as string) || 'EXACT' },
+          keyword: { text: details.keyword as string, match_type: toMatchTypeEnum(details.match_type) },
         },
       }])
     }
@@ -224,11 +231,24 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
     }
 
     case 'bid_adjustment': {
+      if (details.criterion_id) {
+        // Keyword-level CPC
+        return customer.mutateResources([{
+          entity: 'ad_group_criterion',
+          operation: 'update',
+          resource: {
+            resource_name: `customers/${details.customer_id}/adGroupCriteria/${details.google_adgroup_id}~${details.criterion_id}`,
+            cpc_bid_micros: Math.round(Number(details.new_bid || 0) * 1_000_000),
+          },
+        }])
+      }
+      // Ad group-level CPC
+      if (!details.google_adgroup_id) throw new Error('Ad group niet gevonden voor biedaanpassing')
       return customer.mutateResources([{
-        entity: 'ad_group_criterion',
+        entity: 'ad_group',
         operation: 'update',
         resource: {
-          resource_name: `customers/${details.customer_id}/adGroupCriteria/${details.google_adgroup_id}~${details.criterion_id}`,
+          resource_name: `customers/${details.customer_id}/adGroups/${details.google_adgroup_id}`,
           cpc_bid_micros: Math.round(Number(details.new_bid || 0) * 1_000_000),
         },
       }])
@@ -242,7 +262,7 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         operation: 'create' as const,
         resource: {
           ad_group: `customers/${details.customer_id}/adGroups/${details.google_adgroup_id}`,
-          keyword: { text: kw, match_type: (details.match_type as string) || 'PHRASE' },
+          keyword: { text: kw, match_type: toMatchTypeEnum(details.match_type) },
         },
       })))
     }
@@ -332,6 +352,38 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         entity: 'campaign' as const,
         operation: 'create' as const,
         resource: campaignResource,
+      }])
+    }
+
+    case 'ad_text_change': {
+      if (!details.google_adgroup_id) throw new Error('Ad group niet gevonden voor advertentietekst wijziging')
+      const adRows = await customer.query(`
+        SELECT ad_group_ad.resource_name
+        FROM ad_group_ad
+        WHERE ad_group.id = ${details.google_adgroup_id}
+        AND ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD'
+        AND ad_group_ad.status != 'REMOVED'
+        LIMIT 1
+      `)
+      if (!adRows.length || !(adRows[0] as any)?.ad_group_ad?.resource_name) {
+        throw new Error('Geen actieve RSA gevonden in deze ad group')
+      }
+      const resourceName = (adRows[0] as any).ad_group_ad.resource_name as string
+      const headlines = Array.isArray(details.headlines)
+        ? (details.headlines as string[]).map(t => ({ text: t }))
+        : []
+      const descriptions = Array.isArray(details.descriptions)
+        ? (details.descriptions as string[]).map(t => ({ text: t }))
+        : []
+      return customer.mutateResources([{
+        entity: 'ad_group_ad' as const,
+        operation: 'update' as const,
+        resource: {
+          resource_name: resourceName,
+          ad: {
+            responsive_search_ad: { headlines, descriptions },
+          },
+        },
       }])
     }
 
@@ -426,6 +478,11 @@ export async function POST(req: NextRequest) {
         newValue = Array.isArray(details.keywords)
           ? (details.keywords as string[]).join(', ')
           : (details.keyword as string | null ?? null)
+        break
+      case 'ad_text_change':
+        newValue = Array.isArray(details.headlines)
+          ? (details.headlines as string[]).slice(0, 3).join(' | ')
+          : null
         break
     }
 

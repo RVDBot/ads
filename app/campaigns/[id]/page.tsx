@@ -37,6 +37,7 @@ interface AdGroup {
   name: string
   status: string
   keyword_count: number
+  cpc_bid: number | null
   total_cost: number
   total_clicks: number
   total_conversions: number
@@ -464,6 +465,7 @@ export default function CampaignDetailPage() {
                   <Th label="Naam" sortKey="name" sort={agSort} align="left" />
                   <Th label="Status" sortKey="status" sort={agSort} align="left" />
                   {!isShopping && <Th label="Zoekwoorden" sortKey="keyword_count" sort={agSort} />}
+                  <Th label="CPC bod" sortKey="cpc_bid" sort={agSort} />
                   <Th label={`Kosten (${days}d)`} sortKey="total_cost" sort={agSort} />
                   <Th label="Klikken" sortKey="total_clicks" sort={agSort} />
                   <Th label="Conv." sortKey="total_conversions" sort={agSort} />
@@ -482,6 +484,7 @@ export default function CampaignDetailPage() {
                       </span>
                     </td>
                     {!isShopping && <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{ag.keyword_count}</td>}
+                    <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{ag.cpc_bid != null ? formatCurrency(ag.cpc_bid) : '—'}</td>
                     <td className="px-4 py-2 text-[13px] text-right font-medium text-text-primary">{formatCurrency(ag.total_cost || 0)}</td>
                     <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{ag.total_clicks || 0}</td>
                     <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{Math.round(ag.total_conversions || 0)}</td>
@@ -542,7 +545,9 @@ export default function CampaignDetailPage() {
                 <tr className="border-b border-border-subtle">
                   <Th label="Zoekwoord" sortKey="text" sort={kwSort} align="left" />
                   <Th label="Match" sortKey="match_type" sort={kwSort} align="left" />
+                  <Th label="Status" sortKey="status" sort={kwSort} align="left" />
                   <Th label="Groep" sortKey="adgroup_name" sort={kwSort} align="left" />
+                  <Th label="CPC bod" sortKey="bid" sort={kwSort} />
                   <Th label="Kosten" sortKey="total_cost" sort={kwSort} />
                   <Th label="Klikken" sortKey="total_clicks" sort={kwSort} />
                   <Th label="Conv." sortKey="total_conversions" sort={kwSort} />
@@ -560,7 +565,14 @@ export default function CampaignDetailPage() {
                           {mt}
                         </span>
                       </td>
+                      <td className="px-4 py-2">
+                        <span className="flex items-center gap-1.5 text-[12px] text-text-secondary">
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: statusDotColor(k.status) }} />
+                          {k.status === 'ENABLED' ? 'Live' : k.status === 'PAUSED' ? 'Gepauzeerd' : k.status}
+                        </span>
+                      </td>
                       <td className="px-4 py-2 text-[12px] text-text-secondary truncate max-w-[150px]">{k.adgroup_name}</td>
+                      <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{k.bid != null ? formatCurrency(k.bid) : '—'}</td>
                       <td className="px-4 py-2 text-[13px] text-right font-medium text-text-primary">{formatCurrency(k.total_cost || 0)}</td>
                       <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{k.total_clicks || 0}</td>
                       <td className="px-4 py-2 text-[13px] text-right text-text-secondary">{Math.round(k.total_conversions || 0)}</td>

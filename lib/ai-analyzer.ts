@@ -276,7 +276,8 @@ Antwoord ALLEEN met een JSON object (GEEN markdown code fences, geen toelichting
 Gebruik ALTIJD de exacte campagne- en ad group namen uit de data hierboven. Het systeem zoekt de Google IDs automatisch op.
 
 - **budget_change**: { "campaign_name": "exacte naam", "old_budget": 10.0, "new_budget": 15.0 }
-- **bid_adjustment**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "criterion_id": "keyword criterion id", "old_bid": 0.50, "new_bid": 0.65, "percent_change": 30 }
+- **bid_adjustment** (zoekwoord CPC): { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "criterion_id": "keyword criterion id", "old_bid": 0.50, "new_bid": 0.65, "percent_change": 30 }
+- **bid_adjustment** (ad group CPC, geen criterion_id): { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "old_bid": 0.50, "new_bid": 0.65 }
 - **keyword_negative**: { "campaign_name": "exacte naam", "keyword": "zoekterm", "match_type": "EXACT|PHRASE|BROAD" }
 - **pause_campaign**: { "campaign_name": "exacte naam" }
 - **keyword_add**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "keywords": ["kw1", "kw2"], "match_type": "PHRASE|EXACT|BROAD" }
