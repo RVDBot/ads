@@ -498,6 +498,46 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
       }])
     }
 
+    case 'ad_create': {
+      if (!details.google_adgroup_id) throw new Error('Ad group niet gevonden voor advertentie aanmaken')
+      const db3 = getDb()
+      const acHeadlines = (Array.isArray(details.headlines) ? details.headlines as string[] : [])
+        .slice(0, 15).map(t => ({ text: String(t).slice(0, 30).trimEnd() }))
+      const acDescriptions = (Array.isArray(details.descriptions) ? details.descriptions as string[] : [])
+        .slice(0, 4).map(t => ({ text: String(t).slice(0, 90).trimEnd() }))
+
+      let acFinalUrls: string[] = []
+      if (typeof details.final_url === 'string' && details.final_url.startsWith('http')) {
+        acFinalUrls = [details.final_url]
+      } else {
+        const ur = db3.prepare(`
+          SELECT a.final_urls FROM ads a
+          JOIN ad_groups ag ON ag.id = a.adgroup_id
+          WHERE ag.campaign_id = (SELECT ag2.campaign_id FROM ad_groups ag2 WHERE ag2.google_adgroup_id = ?)
+            AND a.final_urls != '[]' AND a.final_urls IS NOT NULL AND a.final_urls != ''
+          LIMIT 1
+        `).get(String(details.google_adgroup_id)) as { final_urls: string } | undefined
+        if (ur) acFinalUrls = JSON.parse(ur.final_urls || '[]')
+      }
+      if (acFinalUrls.length === 0) throw new Error('Geen final_url beschikbaar — geef final_url mee in de actie details')
+
+      log('info', 'google-ads', 'Nieuwe advertentie aanmaken in bestaande ad group', {
+        google_adgroup_id: details.google_adgroup_id,
+        final_urls: acFinalUrls,
+        headline_count: acHeadlines.length,
+        description_count: acDescriptions.length,
+      })
+      return customer.mutateResources([{
+        entity: 'ad_group_ad' as const,
+        operation: 'create' as const,
+        resource: {
+          ad_group: `customers/${details.customer_id}/adGroups/${details.google_adgroup_id}`,
+          status: 'ENABLED',
+          ad: { final_urls: acFinalUrls, responsive_search_ad: { headlines: acHeadlines, descriptions: acDescriptions } },
+        },
+      }])
+    }
+
     case 'adgroup_create': {
       if (!details.google_campaign_id) throw new Error('Campagne niet gevonden voor ad group aanmaken')
       const adgroupName = String(details.adgroup_name || '')
@@ -640,6 +680,7 @@ export async function POST(req: NextRequest) {
           : (details.keyword as string | null ?? null)
         break
       case 'ad_text_change':
+      case 'ad_create':
         newValue = Array.isArray(details.headlines)
           ? (details.headlines as string[]).slice(0, 3).join(' | ')
           : null
@@ -652,7 +693,7 @@ export async function POST(req: NextRequest) {
     const googleResponse = await applyAction(action.type, details)
 
     // After ad mutations: sync ads (and ad groups for adgroup_create) in background
-    if (action.type === 'ad_text_change') {
+    if (action.type === 'ad_text_change' || action.type === 'ad_create') {
       syncAds().catch(e => log('warn', 'google-ads', 'Post-actie syncAds mislukt', { error: e instanceof Error ? e.message : String(e) }))
     } else if (action.type === 'adgroup_create') {
       Promise.all([syncAdGroups(), syncAds()]).catch(e => log('warn', 'google-ads', 'Post-actie sync mislukt', { error: e instanceof Error ? e.message : String(e) }))
