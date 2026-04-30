@@ -16,6 +16,7 @@ interface ChatMessageProps {
   role: 'user' | 'assistant'
   content: string
   proposedActions?: ProposedAction[]
+  images?: string[]
 }
 
 const typeLabels: Record<string, string> = {
@@ -74,7 +75,7 @@ function FormattedText({ text }: { text: string }) {
   )
 }
 
-export default function ChatMessage({ id, role, content, proposedActions }: ChatMessageProps) {
+export default function ChatMessage({ id, role, content, proposedActions, images }: ChatMessageProps) {
   const [localActions, setLocalActions] = useState<ProposedAction[] | undefined>(proposedActions)
   const userInteracted = useRef(false)
 
@@ -99,8 +100,19 @@ export default function ChatMessage({ id, role, content, proposedActions }: Chat
   if (role === 'user') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] bg-accent text-white text-[13px] px-4 py-2.5 rounded-2xl rounded-br-md">
-          {content}
+        <div className="max-w-[85%] flex flex-col gap-1 items-end">
+          {images && images.length > 0 && (
+            <div className="flex gap-1 flex-wrap justify-end">
+              {images.map((url, i) => (
+                <img key={i} src={url} alt="" className="max-w-[140px] max-h-[140px] object-cover rounded-xl border border-white/20" />
+              ))}
+            </div>
+          )}
+          {content && (
+            <div className="bg-accent text-white text-[13px] px-4 py-2.5 rounded-2xl rounded-br-md">
+              {content}
+            </div>
+          )}
         </div>
       </div>
     )

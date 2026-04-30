@@ -14,6 +14,7 @@ interface ChatRequestBody {
   context_type: string
   context_id?: number | null
   message: string
+  images?: Array<{ data: string; mediaType: string }>
 }
 
 function sseEvent(type: string, data: Record<string, unknown>): string {
@@ -34,12 +35,13 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const { context_type, context_id, message } = body
+  const { context_type, context_id, message, images } = body
   let { thread_id } = body
 
-  if (!message || typeof message !== 'string') {
+  const hasImages = Array.isArray(images) && images.length > 0
+  if (!message && !hasImages) {
     return new Response(
-      sseEvent('error', { message: 'Bericht is verplicht' }),
+      sseEvent('error', { message: 'Bericht of afbeelding is verplicht' }),
       { status: 400, headers: { 'Content-Type': 'text/event-stream' } }
     )
   }
@@ -96,7 +98,24 @@ export async function POST(req: NextRequest) {
   const anthropicMessages: Anthropic.MessageParam[] = []
   for (const row of historyRows) {
     if (row.role === 'user') {
-      anthropicMessages.push({ role: 'user', content: row.content || '' })
+      // Last user message gets images attached; history rows are text-only
+      const isLastUserMsg = row === historyRows[historyRows.length - 1]
+      if (isLastUserMsg && hasImages) {
+        const content: Anthropic.ContentBlockParam[] = [
+          ...(images as Array<{ data: string; mediaType: string }>).map(img => ({
+            type: 'image' as const,
+            source: {
+              type: 'base64' as const,
+              media_type: img.mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+              data: img.data,
+            },
+          })),
+          { type: 'text' as const, text: message || ' ' },
+        ]
+        anthropicMessages.push({ role: 'user', content })
+      } else {
+        anthropicMessages.push({ role: 'user', content: row.content || '' })
+      }
     } else if (row.role === 'assistant') {
       // If there are tool_calls, reconstruct the content blocks
       if (row.tool_calls) {

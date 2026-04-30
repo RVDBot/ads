@@ -11,11 +11,18 @@ interface ChatPanelProps {
   onClose: () => void
 }
 
+interface PendingImage {
+  id: string
+  dataUrl: string
+  mediaType: string
+}
+
 interface Message {
   id?: number
   role: 'user' | 'assistant'
   content: string
   proposedActions?: Array<{ type: string; title: string; details: Record<string, unknown>; status: string }>
+  images?: string[] // dataUrls, display only (current session)
 }
 
 function mapMessages(raw: any[]): Message[] {
@@ -46,7 +53,33 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
   const [threadId, setThreadId] = useState<number | null>(null)
   const [streaming, setStreaming] = useState(false)
   const [toolStatus, setToolStatus] = useState<string | null>(null)
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([])
+  const [dragging, setDragging] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  function addImages(files: File[]) {
+    const valid = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    const toAdd = files.filter(f => valid.includes(f.type) && f.size <= 5 * 1024 * 1024).slice(0, 4)
+    for (const file of toAdd) {
+      const reader = new FileReader()
+      reader.onload = e => {
+        const dataUrl = e.target?.result as string
+        setPendingImages(prev => prev.length < 4 ? [...prev, { id: `${Date.now()}-${Math.random()}`, dataUrl, mediaType: file.type }] : prev)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  function handlePaste(e: React.ClipboardEvent) {
+    const files = Array.from(e.clipboardData.files).filter(f => f.type.startsWith('image/'))
+    if (files.length > 0) { e.preventDefault(); addImages(files) }
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDragging(false)
+    addImages(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/')))
+  }
 
   // Load existing thread on mount
   useEffect(() => {
@@ -83,11 +116,14 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
 
   async function handleSend() {
     const text = input.trim()
-    if (!text || streaming) return
+    if (!text && pendingImages.length === 0) return
+    if (streaming) return
 
-    const userMessage: Message = { role: 'user', content: text }
+    const imagesToSend = pendingImages.map(img => ({ data: img.dataUrl.split(',')[1], mediaType: img.mediaType }))
+    const userMessage: Message = { role: 'user', content: text, images: pendingImages.map(i => i.dataUrl) }
     setMessages(prev => [...prev, userMessage])
     setInput('')
+    setPendingImages([])
     setStreaming(true)
 
     // Reset textarea height
@@ -108,6 +144,7 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
           context_type: contextType,
           context_id: contextId,
           message: text,
+          images: imagesToSend,
         }),
       })
 
@@ -267,12 +304,19 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
             input={input}
             streaming={streaming}
             toolStatus={toolStatus}
+            pendingImages={pendingImages}
+            dragging={dragging}
             textareaRef={textareaRef}
             onClose={onClose}
             onClear={handleClearChat}
             onInput={handleInput}
             onKeyDown={handleKeyDown}
             onSend={handleSend}
+            onPaste={handlePaste}
+            onDragOver={e => { e.preventDefault(); setDragging(true) }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+            onRemoveImage={id => setPendingImages(prev => prev.filter(i => i.id !== id))}
           />
         </div>
       </div>
@@ -285,30 +329,44 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
           input={input}
           streaming={streaming}
           toolStatus={toolStatus}
+          pendingImages={pendingImages}
+          dragging={dragging}
           textareaRef={textareaRef}
           onClose={onClose}
           onClear={handleClearChat}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
           onSend={handleSend}
+          onPaste={handlePaste}
+          onDragOver={e => { e.preventDefault(); setDragging(true) }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={handleDrop}
+          onRemoveImage={id => setPendingImages(prev => prev.filter(i => i.id !== id))}
         />
       </div>
     </>
   )
 }
 
-function PanelContent({ title, messages, input, streaming, toolStatus, textareaRef, onClose, onClear, onInput, onKeyDown, onSend }: {
+function PanelContent({ title, messages, input, streaming, toolStatus, pendingImages, dragging, textareaRef, onClose, onClear, onInput, onKeyDown, onSend, onPaste, onDragOver, onDragLeave, onDrop, onRemoveImage }: {
   title?: string
   messages: Message[]
   input: string
   streaming: boolean
   toolStatus: string | null
+  pendingImages: PendingImage[]
+  dragging: boolean
   textareaRef: React.RefObject<HTMLTextAreaElement | null>
   onClose: () => void
   onClear: () => void
   onInput: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
   onSend: () => void
+  onPaste: (e: React.ClipboardEvent) => void
+  onDragOver: (e: React.DragEvent) => void
+  onDragLeave: () => void
+  onDrop: (e: React.DragEvent) => void
+  onRemoveImage: (id: string) => void
 }) {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const prevMsgCount = useRef(0)
@@ -375,6 +433,7 @@ function PanelContent({ title, messages, input, streaming, toolStatus, textareaR
             role={msg.role}
             content={msg.content}
             proposedActions={msg.proposedActions}
+            images={msg.images}
           />
         ))}
         {toolStatus && (
@@ -395,20 +454,39 @@ function PanelContent({ title, messages, input, streaming, toolStatus, textareaR
 
       {/* Input */}
       <div className="px-4 py-3 border-t border-border-subtle shrink-0">
-        <div className="flex items-end gap-2 bg-surface-0 border border-border-subtle rounded-xl px-3 py-2">
+        {pendingImages.length > 0 && (
+          <div className="flex gap-2 mb-2 flex-wrap">
+            {pendingImages.map(img => (
+              <div key={img.id} className="relative shrink-0">
+                <img src={img.dataUrl} alt="" className="w-14 h-14 object-cover rounded-lg border border-border-subtle" />
+                <button
+                  onClick={() => onRemoveImage(img.id)}
+                  className="absolute -top-1 -right-1 w-4 h-4 bg-danger text-white rounded-full text-[10px] flex items-center justify-center leading-none"
+                >×</button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div
+          className={`flex items-end gap-2 bg-surface-0 border rounded-xl px-3 py-2 transition-colors ${dragging ? 'border-accent bg-accent/5' : 'border-border-subtle'}`}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+        >
           <textarea
             ref={textareaRef}
             value={input}
             onChange={onInput}
             onKeyDown={onKeyDown}
+            onPaste={onPaste}
             disabled={streaming}
-            placeholder="Stel een vraag..."
+            placeholder={dragging ? 'Afbeelding loslaten...' : 'Stel een vraag of sleep een afbeelding...'}
             rows={1}
             className="flex-1 bg-transparent text-[13px] text-text-primary placeholder:text-text-tertiary resize-none outline-none max-h-[120px]"
           />
           <button
             onClick={onSend}
-            disabled={streaming || !input.trim()}
+            disabled={streaming || (!input.trim() && pendingImages.length === 0)}
             className="p-1.5 rounded-lg bg-accent text-white hover:bg-accent-hover disabled:opacity-30 shrink-0"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
