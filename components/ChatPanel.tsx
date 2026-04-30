@@ -46,30 +46,7 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
   const [threadId, setThreadId] = useState<number | null>(null)
   const [streaming, setStreaming] = useState(false)
   const [toolStatus, setToolStatus] = useState<string | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const prevMsgCount = useRef(0)
-
-  const scrollToBottom = useCallback((instant = false) => {
-    if (instant && scrollContainerRef.current) {
-      // Direct container scroll — reliable regardless of render timing
-      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
-    } else {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }
-  }, [])
-
-  useEffect(() => {
-    const wasEmpty = prevMsgCount.current === 0
-    prevMsgCount.current = messages.length
-    if (wasEmpty && messages.length > 0) {
-      // Initial load: scroll instantly. Use double-rAF so layout is complete.
-      requestAnimationFrame(() => requestAnimationFrame(() => scrollToBottom(true)))
-    } else {
-      scrollToBottom()
-    }
-  }, [messages, scrollToBottom])
 
   // Load existing thread on mount
   useEffect(() => {
@@ -290,8 +267,6 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
             input={input}
             streaming={streaming}
             toolStatus={toolStatus}
-            scrollContainerRef={scrollContainerRef}
-            messagesEndRef={messagesEndRef}
             textareaRef={textareaRef}
             onClose={onClose}
             onClear={handleClearChat}
@@ -310,8 +285,6 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
           input={input}
           streaming={streaming}
           toolStatus={toolStatus}
-          scrollContainerRef={scrollContainerRef}
-          messagesEndRef={messagesEndRef}
           textareaRef={textareaRef}
           onClose={onClose}
           onClear={handleClearChat}
@@ -324,14 +297,12 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
   )
 }
 
-function PanelContent({ title, messages, input, streaming, toolStatus, scrollContainerRef, messagesEndRef, textareaRef, onClose, onClear, onInput, onKeyDown, onSend }: {
+function PanelContent({ title, messages, input, streaming, toolStatus, textareaRef, onClose, onClear, onInput, onKeyDown, onSend }: {
   title?: string
   messages: Message[]
   input: string
   streaming: boolean
   toolStatus: string | null
-  scrollContainerRef: React.RefObject<HTMLDivElement | null>
-  messagesEndRef: React.RefObject<HTMLDivElement | null>
   textareaRef: React.RefObject<HTMLTextAreaElement | null>
   onClose: () => void
   onClear: () => void
@@ -339,6 +310,24 @@ function PanelContent({ title, messages, input, streaming, toolStatus, scrollCon
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
   onSend: () => void
 }) {
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const prevMsgCount = useRef(0)
+
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+    const wasEmpty = prevMsgCount.current === 0
+    prevMsgCount.current = messages.length
+    if (wasEmpty && messages.length > 0) {
+      // Initial load: double-rAF ensures layout is complete before scroll
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight
+      }))
+    } else if (messages.length > 0) {
+      container.scrollTop = container.scrollHeight
+    }
+  }, [messages])
+
   return (
     <>
       {/* Header */}
@@ -401,7 +390,7 @@ function PanelContent({ title, messages, input, streaming, toolStatus, scrollCon
             <span className="w-1.5 h-1.5 bg-text-tertiary rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
           </div>
         )}
-        <div ref={messagesEndRef} />
+        <div />
       </div>
 
       {/* Input */}

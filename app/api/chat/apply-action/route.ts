@@ -467,11 +467,11 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         description_count: descriptions.length,
       })
 
-      // Remove old ad
+      // Remove old ad — status REMOVED is not allowed via update; use remove operation
       await customer.mutateResources([{
         entity: 'ad_group_ad' as const,
-        operation: 'update' as const,
-        resource: { resource_name: resourceName, status: 'REMOVED' },
+        operation: 'remove' as const,
+        resource: resourceName as any,
       }])
 
       // Create new ad
