@@ -367,38 +367,40 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         LIMIT 1
       `).get(String(details.google_adgroup_id)) as { google_ad_id: string; status: string } | undefined
 
-      if (!adRow) {
-        // Log diagnostic info: total ads in DB for this adgroup (any status)
-        const allAds = db2.prepare(`
-          SELECT a.google_ad_id, a.status
-          FROM ads a
-          JOIN ad_groups ag ON ag.id = a.adgroup_id
-          WHERE ag.google_adgroup_id = ?
-        `).all(String(details.google_adgroup_id)) as Array<{ google_ad_id: string; status: string }>
-        const adgroupRow = db2.prepare(`SELECT id, name FROM ad_groups WHERE google_adgroup_id = ?`)
-          .get(String(details.google_adgroup_id)) as { id: number; name: string } | undefined
-        log('warn', 'google-ads', 'Geen actieve RSA gevonden in lokale DB', {
-          google_adgroup_id: details.google_adgroup_id,
-          adgroup_name: details.adgroup_name,
-          adgroup_in_db: adgroupRow ?? null,
-          all_ads_in_db: allAds,
-          hint: allAds.length === 0 ? 'Ad group heeft geen gesynced ads — sync uitvoeren' : 'Ads aanwezig maar allemaal REMOVED',
-        })
-        throw new Error('Geen actieve advertentie gevonden voor deze ad group — voer eerst een sync uit')
-      }
-
-      log('info', 'google-ads', 'RSA gevonden in lokale DB', {
-        google_adgroup_id: details.google_adgroup_id,
-        google_ad_id: adRow.google_ad_id,
-        ad_status: adRow.status,
-      })
-      const resourceName = `customers/${details.customer_id}/adGroupAds/${details.google_adgroup_id}~${adRow.google_ad_id}`
       const headlines = Array.isArray(details.headlines)
         ? (details.headlines as string[]).map(t => ({ text: t }))
         : []
       const descriptions = Array.isArray(details.descriptions)
         ? (details.descriptions as string[]).map(t => ({ text: t }))
         : []
+
+      if (!adRow) {
+        // No existing ad — create a new RSA
+        log('info', 'google-ads', 'Geen bestaande RSA gevonden — nieuwe advertentie aanmaken', {
+          google_adgroup_id: details.google_adgroup_id,
+          adgroup_name: details.adgroup_name,
+          headlines: headlines.map(h => h.text),
+        })
+        return customer.mutateResources([{
+          entity: 'ad_group_ad' as const,
+          operation: 'create' as const,
+          resource: {
+            ad_group: `customers/${details.customer_id}/adGroups/${details.google_adgroup_id}`,
+            status: 'ENABLED',
+            ad: {
+              responsive_search_ad: { headlines, descriptions },
+            },
+          },
+        }])
+      }
+
+      // Existing ad — update it
+      log('info', 'google-ads', 'Bestaande RSA updaten', {
+        google_adgroup_id: details.google_adgroup_id,
+        google_ad_id: adRow.google_ad_id,
+        ad_status: adRow.status,
+      })
+      const resourceName = `customers/${details.customer_id}/adGroupAds/${details.google_adgroup_id}~${adRow.google_ad_id}`
       return customer.mutateResources([{
         entity: 'ad_group_ad' as const,
         operation: 'update' as const,
