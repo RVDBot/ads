@@ -163,6 +163,17 @@ async function verifyAction(actionType: string, details: Record<string, unknown>
         return { verified: rows.length > 0, actual: rows.length > 0 ? 'gevonden' : 'niet gevonden', expected: campName }
       }
 
+      case 'adgroup_create': {
+        if (!details.google_campaign_id || !details.adgroup_name) return { verified: true }
+        const rows = await customer.query(`
+          SELECT ad_group.name FROM ad_group
+          WHERE campaign.id = ${details.google_campaign_id}
+            AND ad_group.name = '${String(details.adgroup_name).replace(/'/g, "\\'")}'
+          LIMIT 1
+        `)
+        return { verified: rows.length > 0, actual: rows.length > 0 ? 'gevonden' : 'niet gevonden', expected: details.adgroup_name }
+      }
+
       default:
         // For types we can't easily verify, assume success if API didn't throw
         return { verified: true }
@@ -445,6 +456,55 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
       }])
     }
 
+    case 'adgroup_create': {
+      if (!details.google_campaign_id) throw new Error('Campagne niet gevonden voor ad group aanmaken')
+      const adgroupName = String(details.adgroup_name || '')
+      if (!adgroupName) throw new Error('Ad group naam ontbreekt')
+
+      // Step 1: create the ad group
+      await customer.mutateResources([{
+        entity: 'ad_group' as const,
+        operation: 'create' as const,
+        resource: {
+          name: adgroupName,
+          campaign: `customers/${details.customer_id}/campaigns/${details.google_campaign_id}`,
+          status: 'ENABLED',
+          ...(details.cpc_bid ? { cpc_bid_micros: Math.round(Number(details.cpc_bid) * 1_000_000) } : {}),
+        },
+      }])
+      log('info', 'google-ads', `Ad group aangemaakt: ${adgroupName}`, { campaign_id: details.google_campaign_id })
+
+      // Step 2: if headlines/descriptions provided, also create the RSA
+      if (Array.isArray(details.headlines) && (details.headlines as string[]).length >= 3) {
+        const agRows = await customer.query(`
+          SELECT ad_group.id FROM ad_group
+          WHERE campaign.id = ${details.google_campaign_id}
+            AND ad_group.name = '${adgroupName.replace(/'/g, "\\'")}'
+          LIMIT 1
+        `)
+        const newAgId = (agRows[0] as any)?.ad_group?.id
+        if (newAgId) {
+          const newHeadlines = (details.headlines as string[]).slice(0, 15).map(t => ({ text: String(t).slice(0, 30) }))
+          const newDescriptions = (Array.isArray(details.descriptions) ? details.descriptions as string[] : []).slice(0, 4).map(t => ({ text: String(t).slice(0, 90) }))
+          const finalUrls = typeof details.final_url === 'string' && details.final_url.startsWith('http')
+            ? [details.final_url] : []
+          if (finalUrls.length > 0 && newDescriptions.length >= 2) {
+            await customer.mutateResources([{
+              entity: 'ad_group_ad' as const,
+              operation: 'create' as const,
+              resource: {
+                ad_group: `customers/${details.customer_id}/adGroups/${newAgId}`,
+                status: 'ENABLED',
+                ad: { final_urls: finalUrls, responsive_search_ad: { headlines: newHeadlines, descriptions: newDescriptions } },
+              },
+            }])
+            log('info', 'google-ads', `RSA aangemaakt in nieuwe ad group ${adgroupName}`)
+          }
+        }
+      }
+      return { created: adgroupName }
+    }
+
     default:
       throw new Error(`Onbekend actie-type: ${actionType}`)
   }
@@ -541,6 +601,9 @@ export async function POST(req: NextRequest) {
         newValue = Array.isArray(details.headlines)
           ? (details.headlines as string[]).slice(0, 3).join(' | ')
           : null
+        break
+      case 'adgroup_create':
+        newValue = details.adgroup_name as string | null ?? null
         break
     }
 

@@ -263,7 +263,7 @@ Antwoord ALLEEN met een JSON object (GEEN markdown code fences, geen toelichting
   "findings": ["bevinding 1", "bevinding 2", ...],
   "suggestions": [
     {
-      "type": "budget_change|bid_adjustment|keyword_negative|ad_text_change|new_campaign|pause_campaign|keyword_add|schedule_change",
+      "type": "budget_change|bid_adjustment|keyword_negative|ad_text_change|adgroup_create|new_campaign|pause_campaign|keyword_add|schedule_change",
       "priority": "high|medium|low",
       "title": "Korte titel",
       "description": "Uitleg waarom en verwacht effect",
@@ -282,6 +282,7 @@ Gebruik ALTIJD de exacte campagne- en ad group namen uit de data hierboven. Het 
 - **pause_campaign**: { "campaign_name": "exacte naam" }
 - **keyword_add**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "keywords": ["kw1", "kw2"], "match_type": "PHRASE|EXACT|BROAD" }
 - **ad_text_change**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "headlines": ["headline1"], "descriptions": ["desc1"], "final_url": "https://..." } — final_url is verplicht: gebruik de URL van een bestaande ad in dezelfde campagne
+- **adgroup_create**: { "campaign_name": "exacte naam", "adgroup_name": "nieuwe naam", "cpc_bid": 0.50, "headlines": ["h1","h2","h3"], "descriptions": ["d1","d2"], "final_url": "https://..." } — gebruik dit voor nieuwe ad groups, NIET ad_text_change
 - **new_campaign**: { "campaign_name": "voorgestelde naam", "country": "nl", "type": "SEARCH|SHOPPING", "daily_budget": 10.0, "keywords": ["kw1"], "headlines": ["headline1", "headline2", "headline3"], "descriptions": ["desc1", "desc2"] }
   (SEARCH: verplicht 3+ headlines max 30 tekens, 2+ descriptions max 90 tekens, in de taal van het land. SHOPPING: headlines/descriptions weglaten.)
 - **schedule_change**: { "campaign_name": "exacte naam", "schedule": "beschrijving van wijziging" }`

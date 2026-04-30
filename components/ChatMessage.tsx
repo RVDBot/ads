@@ -26,6 +26,7 @@ const typeLabels: Record<string, string> = {
   pause_campaign: 'Campagne pauzeren',
   keyword_add: 'Zoekwoord toevoegen',
   ad_text_change: 'Advertentie wijzigen',
+  adgroup_create: 'Advertentiegroep aanmaken',
   new_campaign: 'Nieuwe campagne',
   schedule_change: 'Schema wijzigen',
 }

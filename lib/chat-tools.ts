@@ -78,13 +78,13 @@ export const CHAT_TOOLS = [
       properties: {
         type: {
           type: 'string',
-          enum: ['budget_change', 'bid_adjustment', 'keyword_negative', 'pause_campaign', 'keyword_add', 'ad_text_change', 'new_campaign', 'schedule_change'],
+          enum: ['budget_change', 'bid_adjustment', 'keyword_negative', 'pause_campaign', 'keyword_add', 'ad_text_change', 'adgroup_create', 'new_campaign', 'schedule_change'],
           description: 'Type actie',
         },
         title: { type: 'string', description: 'Korte beschrijving van de actie' },
         details: {
           type: 'object',
-          description: 'Actie-specifieke details. budget_change: {campaign_name, old_budget, new_budget}. keyword_negative: {campaign_name, keyword, match_type}. bid_adjustment: {campaign_name, adgroup_name, old_bid, new_bid}. pause_campaign: {campaign_name}. keyword_add: {campaign_name, adgroup_name, keywords[], match_type}. ad_text_change: {campaign_name, adgroup_name, headlines[], descriptions[], final_url} — final_url is verplicht: gebruik de final_url uit get_ad_texts van een bestaande ad in dezelfde campagne.',
+          description: 'Actie-specifieke details. budget_change: {campaign_name, old_budget, new_budget}. keyword_negative: {campaign_name, keyword, match_type}. bid_adjustment: {campaign_name, adgroup_name, old_bid, new_bid}. pause_campaign: {campaign_name}. keyword_add: {campaign_name, adgroup_name, keywords[], match_type}. ad_text_change: {campaign_name, adgroup_name, headlines[], descriptions[], final_url}. adgroup_create: {campaign_name, adgroup_name, cpc_bid?, headlines[]?, descriptions[]?, final_url?} — gebruik adgroup_create voor nieuwe ad groups, NIET ad_text_change.',
         },
       },
       required: ['type', 'title', 'details'],
