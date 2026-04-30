@@ -16,3 +16,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   return NextResponse.json({ thread, messages })
 }
+
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const denied = requireAuth(req); if (denied) return denied
+  const { id } = await ctx.params
+  const db = getDb()
+  db.prepare('DELETE FROM chat_threads WHERE id = ?').run(id)
+  return NextResponse.json({ ok: true })
+}

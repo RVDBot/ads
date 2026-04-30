@@ -89,16 +89,13 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
     loadThread()
   }, [contextType, contextId])
 
-  async function refreshMessages() {
-    if (!threadId) return
+  async function handleClearChat() {
+    if (!threadId || streaming) return
     try {
-      const res = await apiFetch(`/api/chat/threads/${threadId}`)
-      if (!res.ok) return
-      const data = await res.json()
-      setMessages(mapMessages(data.messages || []))
-    } catch {
-      // ignore
-    }
+      await apiFetch(`/api/chat/threads/${threadId}`, { method: 'DELETE' })
+    } catch { /* ignore */ }
+    setMessages([])
+    setThreadId(null)
   }
 
   async function handleSend() {
@@ -290,6 +287,7 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
             messagesEndRef={messagesEndRef}
             textareaRef={textareaRef}
             onClose={onClose}
+            onClear={handleClearChat}
             onInput={handleInput}
             onKeyDown={handleKeyDown}
             onSend={handleSend}
@@ -308,6 +306,7 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
           messagesEndRef={messagesEndRef}
           textareaRef={textareaRef}
           onClose={onClose}
+          onClear={handleClearChat}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
           onSend={handleSend}
@@ -317,7 +316,7 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
   )
 }
 
-function PanelContent({ title, messages, input, streaming, toolStatus, messagesEndRef, textareaRef, onClose, onInput, onKeyDown, onSend }: {
+function PanelContent({ title, messages, input, streaming, toolStatus, messagesEndRef, textareaRef, onClose, onClear, onInput, onKeyDown, onSend }: {
   title?: string
   messages: Message[]
   input: string
@@ -326,6 +325,7 @@ function PanelContent({ title, messages, input, streaming, toolStatus, messagesE
   messagesEndRef: React.RefObject<HTMLDivElement | null>
   textareaRef: React.RefObject<HTMLTextAreaElement | null>
   onClose: () => void
+  onClear: () => void
   onInput: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
   onSend: () => void
@@ -343,6 +343,16 @@ function PanelContent({ title, messages, input, streaming, toolStatus, messagesE
             {title || 'AI Assistent'}
           </div>
         </div>
+        {messages.length > 0 && (
+          <button onClick={onClear} title="Chat wissen" className="p-1.5 rounded-lg hover:bg-surface-2 text-text-tertiary hover:text-danger shrink-0 transition-colors">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+              <path d="M10 11v6M14 11v6" />
+              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+            </svg>
+          </button>
+        )}
         <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-2 text-text-tertiary shrink-0">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" />
