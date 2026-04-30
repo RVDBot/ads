@@ -358,14 +358,40 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
     case 'ad_text_change': {
       if (!details.google_adgroup_id) throw new Error('Ad group niet gevonden voor advertentietekst wijziging')
       // Use locally synced ads table — live GAQL query for resource_name is unreliable
-      const adRow = getDb().prepare(`
-        SELECT a.google_ad_id
+      const db2 = getDb()
+      const adRow = db2.prepare(`
+        SELECT a.google_ad_id, a.status
         FROM ads a
         JOIN ad_groups ag ON ag.id = a.adgroup_id
         WHERE ag.google_adgroup_id = ? AND a.status != 'REMOVED'
         LIMIT 1
-      `).get(String(details.google_adgroup_id)) as { google_ad_id: string } | undefined
-      if (!adRow) throw new Error('Geen actieve advertentie gevonden voor deze ad group — voer eerst een sync uit')
+      `).get(String(details.google_adgroup_id)) as { google_ad_id: string; status: string } | undefined
+
+      if (!adRow) {
+        // Log diagnostic info: total ads in DB for this adgroup (any status)
+        const allAds = db2.prepare(`
+          SELECT a.google_ad_id, a.status
+          FROM ads a
+          JOIN ad_groups ag ON ag.id = a.adgroup_id
+          WHERE ag.google_adgroup_id = ?
+        `).all(String(details.google_adgroup_id)) as Array<{ google_ad_id: string; status: string }>
+        const adgroupRow = db2.prepare(`SELECT id, name FROM ad_groups WHERE google_adgroup_id = ?`)
+          .get(String(details.google_adgroup_id)) as { id: number; name: string } | undefined
+        log('warn', 'ad-text-change', 'Geen actieve RSA gevonden in lokale DB', {
+          google_adgroup_id: details.google_adgroup_id,
+          adgroup_name: details.adgroup_name,
+          adgroup_in_db: adgroupRow ?? null,
+          all_ads_in_db: allAds,
+          hint: allAds.length === 0 ? 'Ad group heeft geen gesynced ads — sync uitvoeren' : 'Ads aanwezig maar allemaal REMOVED',
+        })
+        throw new Error('Geen actieve advertentie gevonden voor deze ad group — voer eerst een sync uit')
+      }
+
+      log('info', 'ad-text-change', 'RSA gevonden in lokale DB', {
+        google_adgroup_id: details.google_adgroup_id,
+        google_ad_id: adRow.google_ad_id,
+        ad_status: adRow.status,
+      })
       const resourceName = `customers/${details.customer_id}/adGroupAds/${details.google_adgroup_id}~${adRow.google_ad_id}`
       const headlines = Array.isArray(details.headlines)
         ? (details.headlines as string[]).map(t => ({ text: t }))
