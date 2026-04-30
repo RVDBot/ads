@@ -281,7 +281,7 @@ Gebruik ALTIJD de exacte campagne- en ad group namen uit de data hierboven. Het 
 - **keyword_negative**: { "campaign_name": "exacte naam", "keyword": "zoekterm", "match_type": "EXACT|PHRASE|BROAD" }
 - **pause_campaign**: { "campaign_name": "exacte naam" }
 - **keyword_add**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "keywords": ["kw1", "kw2"], "match_type": "PHRASE|EXACT|BROAD" }
-- **ad_text_change**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "headlines": ["headline1"], "descriptions": ["desc1"] }
+- **ad_text_change**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "headlines": ["headline1"], "descriptions": ["desc1"], "final_url": "https://..." } — final_url is verplicht: gebruik de URL van een bestaande ad in dezelfde campagne
 - **new_campaign**: { "campaign_name": "voorgestelde naam", "country": "nl", "type": "SEARCH|SHOPPING", "daily_budget": 10.0, "keywords": ["kw1"], "headlines": ["headline1", "headline2", "headline3"], "descriptions": ["desc1", "desc2"] }
   (SEARCH: verplicht 3+ headlines max 30 tekens, 2+ descriptions max 90 tekens, in de taal van het land. SHOPPING: headlines/descriptions weglaten.)
 - **schedule_change**: { "campaign_name": "exacte naam", "schedule": "beschrijving van wijziging" }`

@@ -376,20 +376,32 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         .map(t => ({ text: String(t).slice(0, 90) }))
 
       if (!adRow) {
-        // No existing ad — create a new RSA; look up final_urls from another ad in this campaign
-        const urlRow = db2.prepare(`
-          SELECT a.final_urls
-          FROM ads a
-          JOIN ad_groups ag ON ag.id = a.adgroup_id
-          JOIN campaigns c ON c.id = ag.campaign_id
-          JOIN ad_groups ag2 ON ag2.campaign_id = c.id AND ag2.google_adgroup_id = ?
-          WHERE a.final_urls != '[]' AND a.final_urls IS NOT NULL
-          LIMIT 1
-        `).get(String(details.google_adgroup_id)) as { final_urls: string } | undefined
+        // No existing ad — create a new RSA
+        // Priority: 1) details.final_url from AI, 2) DB lookup, 3) error
+        let finalUrls: string[] = []
 
-        const finalUrls: string[] = urlRow ? JSON.parse(urlRow.final_urls || '[]') : []
+        if (typeof details.final_url === 'string' && details.final_url.startsWith('http')) {
+          finalUrls = [details.final_url]
+        } else {
+          const urlRow = db2.prepare(`
+            SELECT a.final_urls
+            FROM ads a
+            JOIN ad_groups ag ON ag.id = a.adgroup_id
+            WHERE ag.campaign_id = (SELECT ag2.campaign_id FROM ad_groups ag2 WHERE ag2.google_adgroup_id = ?)
+              AND a.final_urls != '[]' AND a.final_urls IS NOT NULL AND a.final_urls != ''
+            LIMIT 1
+          `).get(String(details.google_adgroup_id)) as { final_urls: string } | undefined
+          if (urlRow) finalUrls = JSON.parse(urlRow.final_urls || '[]')
+        }
+
         if (finalUrls.length === 0) {
-          throw new Error('Geen final_url gevonden voor nieuwe advertentie — sync eerst de bestaande ads')
+          const sampleUrls = db2.prepare(`SELECT a.final_urls FROM ads a LIMIT 5`).all() as Array<{ final_urls: string }>
+          log('warn', 'google-ads', 'Geen final_url beschikbaar voor nieuwe RSA', {
+            google_adgroup_id: details.google_adgroup_id,
+            details_final_url: details.final_url ?? null,
+            sample_db_urls: sampleUrls.map(r => r.final_urls),
+          })
+          throw new Error('Geen final_url beschikbaar — geef final_url mee in de actie details')
         }
 
         log('info', 'google-ads', 'Geen bestaande RSA — nieuwe advertentie aanmaken', {

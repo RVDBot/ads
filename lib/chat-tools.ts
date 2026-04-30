@@ -84,7 +84,7 @@ export const CHAT_TOOLS = [
         title: { type: 'string', description: 'Korte beschrijving van de actie' },
         details: {
           type: 'object',
-          description: 'Actie-specifieke details. budget_change: {campaign_name, old_budget, new_budget}. keyword_negative: {campaign_name, keyword, match_type}. bid_adjustment: {campaign_name, adgroup_name, old_bid, new_bid}. pause_campaign: {campaign_name}. keyword_add: {campaign_name, adgroup_name, keywords[], match_type}. ad_text_change: {campaign_name, adgroup_name, headlines[], descriptions[]}.',
+          description: 'Actie-specifieke details. budget_change: {campaign_name, old_budget, new_budget}. keyword_negative: {campaign_name, keyword, match_type}. bid_adjustment: {campaign_name, adgroup_name, old_bid, new_bid}. pause_campaign: {campaign_name}. keyword_add: {campaign_name, adgroup_name, keywords[], match_type}. ad_text_change: {campaign_name, adgroup_name, headlines[], descriptions[], final_url} — final_url is verplicht: gebruik de final_url uit get_ad_texts van een bestaande ad in dezelfde campagne.',
         },
       },
       required: ['type', 'title', 'details'],
@@ -140,7 +140,7 @@ export function executeTool(name: string, input: Record<string, unknown>): { res
 
     case 'get_ad_texts': {
       const ads = db.prepare(`
-        SELECT ag.name as adgroup, a.headlines, a.descriptions, a.status
+        SELECT ag.name as adgroup, a.headlines, a.descriptions, a.final_urls, a.status
         FROM ads a
         JOIN ad_groups ag ON ag.id = a.adgroup_id
         WHERE ag.campaign_id = ? AND a.status = 'ENABLED'
@@ -150,6 +150,7 @@ export function executeTool(name: string, input: Record<string, unknown>): { res
         adgroup: a.adgroup,
         headlines: JSON.parse(a.headlines || '[]'),
         descriptions: JSON.parse(a.descriptions || '[]'),
+        final_urls: JSON.parse(a.final_urls || '[]'),
       }))) }
     }
 
