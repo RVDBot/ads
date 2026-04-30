@@ -436,20 +436,53 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         }])
       }
 
-      // Existing ad — update it
-      log('info', 'google-ads', 'Bestaande RSA updaten', {
+      // Existing ad — RSA headlines/descriptions are immutable via UPDATE.
+      // Strategy: remove the old ad, create a new one with the new text.
+      const existingFinalUrls = JSON.parse(adRow.final_urls || '[]') as string[]
+      const replaceFinalUrls = (typeof details.final_url === 'string' && details.final_url.startsWith('http'))
+        ? [details.final_url]
+        : existingFinalUrls.length > 0
+          ? existingFinalUrls
+          : (() => {
+              const ur = db2.prepare(`
+                SELECT a.final_urls FROM ads a
+                JOIN ad_groups ag ON ag.id = a.adgroup_id
+                WHERE ag.campaign_id = (SELECT ag2.campaign_id FROM ad_groups ag2 WHERE ag2.google_adgroup_id = ?)
+                  AND a.final_urls != '[]' AND a.final_urls IS NOT NULL AND a.final_urls != ''
+                LIMIT 1
+              `).get(String(details.google_adgroup_id)) as { final_urls: string } | undefined
+              return ur ? JSON.parse(ur.final_urls || '[]') as string[] : []
+            })()
+
+      if (replaceFinalUrls.length === 0) {
+        throw new Error('Geen final_url beschikbaar voor vervanging advertentie — geef final_url mee in de actie details')
+      }
+
+      const resourceName = `customers/${details.customer_id}/adGroupAds/${details.google_adgroup_id}~${adRow.google_ad_id}`
+      log('info', 'google-ads', 'Bestaande RSA vervangen (remove + create)', {
         google_adgroup_id: details.google_adgroup_id,
         google_ad_id: adRow.google_ad_id,
+        final_urls: replaceFinalUrls,
         headline_count: headlines.length,
         description_count: descriptions.length,
       })
-      const resourceName = `customers/${details.customer_id}/adGroupAds/${details.google_adgroup_id}~${adRow.google_ad_id}`
-      return customer.mutateResources([{
+
+      // Remove old ad
+      await customer.mutateResources([{
         entity: 'ad_group_ad' as const,
         operation: 'update' as const,
+        resource: { resource_name: resourceName, status: 'REMOVED' },
+      }])
+
+      // Create new ad
+      return customer.mutateResources([{
+        entity: 'ad_group_ad' as const,
+        operation: 'create' as const,
         resource: {
-          resource_name: resourceName,
+          ad_group: `customers/${details.customer_id}/adGroups/${details.google_adgroup_id}`,
+          status: 'ENABLED',
           ad: {
+            final_urls: replaceFinalUrls,
             responsive_search_ad: { headlines, descriptions },
           },
         },
