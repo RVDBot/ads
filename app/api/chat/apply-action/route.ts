@@ -174,6 +174,18 @@ async function verifyAction(actionType: string, details: Record<string, unknown>
         return { verified: rows.length > 0, actual: rows.length > 0 ? 'gevonden' : 'niet gevonden', expected: details.adgroup_name }
       }
 
+      case 'campaign_targeting': {
+        if (!details.google_campaign_id) return { verified: true }
+        const rows = await customer.query(`
+          SELECT campaign_criterion.location.geo_target_constant
+          FROM campaign_criterion
+          WHERE campaign.id = ${details.google_campaign_id}
+            AND campaign_criterion.type = 'LOCATION'
+          LIMIT 1
+        `)
+        return { verified: rows.length > 0, actual: rows.length > 0 ? 'geo-targeting aanwezig' : 'geen geo-targeting', expected: 'geo-targeting ingesteld' }
+      }
+
       default:
         // For types we can't easily verify, assume success if API didn't throw
         return { verified: true }
@@ -189,6 +201,94 @@ async function verifyAction(actionType: string, details: Record<string, unknown>
 const MATCH_TYPE_ENUM: Record<string, number> = { EXACT: 2, PHRASE: 3, BROAD: 4 }
 function toMatchTypeEnum(val: unknown): number {
   return MATCH_TYPE_ENUM[String(val || '').toUpperCase()] ?? 3
+}
+
+// Geo-target constant resource names per country code
+const GEO_TARGETS: Record<string, string> = {
+  nl: 'geoTargetConstants/2528', de: 'geoTargetConstants/2276',
+  fr: 'geoTargetConstants/2250', es: 'geoTargetConstants/2724',
+  it: 'geoTargetConstants/2380', be: 'geoTargetConstants/2056',
+  at: 'geoTargetConstants/2040', ch: 'geoTargetConstants/2756',
+  gb: 'geoTargetConstants/2826', us: 'geoTargetConstants/2840',
+  pl: 'geoTargetConstants/2616', dk: 'geoTargetConstants/2208',
+  se: 'geoTargetConstants/2752', no: 'geoTargetConstants/2578',
+}
+
+// Language constant resource names per country code
+const LANGUAGE_TARGETS: Record<string, string[]> = {
+  nl: ['languageConstants/1010'],             // Nederlands
+  de: ['languageConstants/1001'],             // Duits
+  fr: ['languageConstants/1002'],             // Frans
+  es: ['languageConstants/1003'],             // Spaans
+  it: ['languageConstants/1004'],             // Italiaans
+  be: ['languageConstants/1010', 'languageConstants/1002', 'languageConstants/1019'], // NL+FR+DE
+  at: ['languageConstants/1001'],             // Duits
+  ch: ['languageConstants/1001', 'languageConstants/1002', 'languageConstants/1019'], // DE+FR+IT
+  com: ['languageConstants/1000'],            // Engels
+  gb: ['languageConstants/1000'],
+  us: ['languageConstants/1000'],
+  pl: ['languageConstants/1020'],             // Pools
+  dk: ['languageConstants/1009'],             // Deens
+  se: ['languageConstants/1015'],             // Zweeds
+  no: ['languageConstants/1013'],             // Noors
+}
+
+async function applyTargeting(
+  customer: ReturnType<typeof getGoogleAdsClient>,
+  customerId: string,
+  campaignId: string,
+  country: string,
+) {
+  const countryLower = country.toLowerCase()
+  const campaignResource = `customers/${customerId}/campaigns/${campaignId}`
+
+  // Remove existing location + language criteria first
+  const existing = await customer.query(`
+    SELECT campaign_criterion.resource_name, campaign_criterion.type
+    FROM campaign_criterion
+    WHERE campaign.id = ${campaignId}
+      AND campaign_criterion.type IN ('LOCATION', 'LANGUAGE')
+      AND campaign_criterion.negative = false
+  `)
+  for (const row of existing) {
+    const rn = (row as any).campaign_criterion?.resource_name
+    if (!rn) continue
+    try {
+      await customer.mutateResources([{
+        entity: 'campaign_criterion' as const,
+        operation: 'remove' as const,
+        resource: rn as any,
+      }])
+    } catch { /* ignore remove errors */ }
+  }
+
+  // Add location targeting
+  const geoTarget = GEO_TARGETS[countryLower]
+  if (geoTarget) {
+    await customer.mutateResources([{
+      entity: 'campaign_criterion' as const,
+      operation: 'create' as const,
+      resource: {
+        campaign: campaignResource,
+        location: { geo_target_constant: geoTarget },
+      },
+    }])
+  }
+
+  // Add language targeting
+  const languages = LANGUAGE_TARGETS[countryLower] || []
+  for (const lang of languages) {
+    await customer.mutateResources([{
+      entity: 'campaign_criterion' as const,
+      operation: 'create' as const,
+      resource: {
+        campaign: campaignResource,
+        language: { language_constant: lang },
+      },
+    }])
+  }
+
+  log('info', 'google-ads', `Targeting ingesteld voor campagne ${campaignId}`, { country: countryLower, geoTarget, languages })
 }
 
 async function applyAction(actionType: string, details: Record<string, unknown>): Promise<unknown> {
@@ -359,11 +459,30 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         campaignResource.manual_cpc = { enhanced_cpc_enabled: false }
       }
 
-      return customer.mutateResources([{
+      await customer.mutateResources([{
         entity: 'campaign' as const,
         operation: 'create' as const,
         resource: campaignResource,
       }])
+
+      // Apply geo + language targeting
+      const country = ((details.country as string) || 'nl').toLowerCase()
+      const newCampRows = await customer.query(`
+        SELECT campaign.id FROM campaign
+        WHERE campaign.name = '${campaignName.replace(/'/g, "\\'")}' LIMIT 1
+      `)
+      const newCampId = String((newCampRows[0] as any)?.campaign?.id || '')
+      if (newCampId) {
+        await applyTargeting(customer, String(details.customer_id), newCampId, country)
+      }
+      return { created: campaignName, targeting: country }
+    }
+
+    case 'campaign_targeting': {
+      if (!details.google_campaign_id) throw new Error('Campagne niet gevonden voor targeting aanpassing')
+      const targetCountry = String(details.country || 'nl').toLowerCase()
+      await applyTargeting(customer, String(details.customer_id), String(details.google_campaign_id), targetCountry)
+      return { campaign_id: details.google_campaign_id, country: targetCountry }
     }
 
     case 'ad_text_change': {
@@ -695,6 +814,9 @@ export async function POST(req: NextRequest) {
         break
       case 'adgroup_create':
         newValue = details.adgroup_name as string | null ?? null
+        break
+      case 'campaign_targeting':
+        newValue = details.country as string | null ?? null
         break
     }
 

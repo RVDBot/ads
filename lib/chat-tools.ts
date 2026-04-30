@@ -78,13 +78,13 @@ export const CHAT_TOOLS = [
       properties: {
         type: {
           type: 'string',
-          enum: ['budget_change', 'bid_adjustment', 'keyword_negative', 'pause_campaign', 'keyword_add', 'ad_text_change', 'ad_create', 'adgroup_create', 'new_campaign', 'schedule_change'],
+          enum: ['budget_change', 'bid_adjustment', 'keyword_negative', 'pause_campaign', 'keyword_add', 'ad_text_change', 'ad_create', 'adgroup_create', 'new_campaign', 'campaign_targeting', 'schedule_change'],
           description: 'Type actie',
         },
         title: { type: 'string', description: 'Korte beschrijving van de actie' },
         details: {
           type: 'object',
-          description: 'Actie-specifieke details. budget_change: {campaign_name, old_budget, new_budget}. keyword_negative: {campaign_name, keyword, match_type}. bid_adjustment: {campaign_name, adgroup_name, old_bid, new_bid}. pause_campaign: {campaign_name}. keyword_add: {campaign_name, adgroup_name, keywords[], match_type}. ad_text_change: {campaign_name, adgroup_name, headlines[], descriptions[], final_url} — ALLEEN voor aanpassen van BESTAANDE advertentie. ad_create: {campaign_name, adgroup_name, headlines[], descriptions[], final_url} — voor NIEUWE advertentie in bestaande ad group. adgroup_create: {campaign_name, adgroup_name, cpc_bid?, headlines[]?, descriptions[]?, final_url?} — voor nieuwe ad group aanmaken.',
+          description: 'Actie-specifieke details. budget_change: {campaign_name, old_budget, new_budget}. keyword_negative: {campaign_name, keyword, match_type}. bid_adjustment: {campaign_name, adgroup_name, old_bid, new_bid}. pause_campaign: {campaign_name}. keyword_add: {campaign_name, adgroup_name, keywords[], match_type}. ad_text_change: {campaign_name, adgroup_name, headlines[], descriptions[], final_url} — ALLEEN voor aanpassen van BESTAANDE advertentie. ad_create: {campaign_name, adgroup_name, headlines[], descriptions[], final_url} — voor NIEUWE advertentie in bestaande ad group. adgroup_create: {campaign_name, adgroup_name, cpc_bid?, headlines[]?, descriptions[]?, final_url?} — voor nieuwe ad group aanmaken. campaign_targeting: {campaign_name, country} — stelt geo-targeting en taal in voor een campagne (nl/de/fr/es/it/be/com/etc).',
         },
       },
       required: ['type', 'title', 'details'],
