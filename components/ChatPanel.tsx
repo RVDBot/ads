@@ -48,13 +48,21 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
   const [toolStatus, setToolStatus] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const prevMsgCount = useRef(0)
 
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  const scrollToBottom = useCallback((instant = false) => {
+    messagesEndRef.current?.scrollIntoView({ behavior: instant ? 'instant' : 'smooth' })
   }, [])
 
   useEffect(() => {
-    scrollToBottom()
+    const wasEmpty = prevMsgCount.current === 0
+    prevMsgCount.current = messages.length
+    if (wasEmpty && messages.length > 0) {
+      // Initial load: jump instantly after the DOM has painted
+      requestAnimationFrame(() => scrollToBottom(true))
+    } else {
+      scrollToBottom()
+    }
   }, [messages, scrollToBottom])
 
   // Load existing thread on mount
