@@ -377,7 +377,7 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         `).all(String(details.google_adgroup_id)) as Array<{ google_ad_id: string; status: string }>
         const adgroupRow = db2.prepare(`SELECT id, name FROM ad_groups WHERE google_adgroup_id = ?`)
           .get(String(details.google_adgroup_id)) as { id: number; name: string } | undefined
-        log('warn', 'ad-text-change', 'Geen actieve RSA gevonden in lokale DB', {
+        log('warn', 'google-ads', 'Geen actieve RSA gevonden in lokale DB', {
           google_adgroup_id: details.google_adgroup_id,
           adgroup_name: details.adgroup_name,
           adgroup_in_db: adgroupRow ?? null,
@@ -387,7 +387,7 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         throw new Error('Geen actieve advertentie gevonden voor deze ad group — voer eerst een sync uit')
       }
 
-      log('info', 'ad-text-change', 'RSA gevonden in lokale DB', {
+      log('info', 'google-ads', 'RSA gevonden in lokale DB', {
         google_adgroup_id: details.google_adgroup_id,
         google_ad_id: adRow.google_ad_id,
         ad_status: adRow.status,
