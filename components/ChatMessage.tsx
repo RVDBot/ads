@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { apiFetch } from '@/lib/api'
 
 interface ProposedAction {
@@ -75,12 +75,19 @@ function FormattedText({ text }: { text: string }) {
 }
 
 export default function ChatMessage({ id, role, content, proposedActions }: ChatMessageProps) {
-  // Initialise once from props — never overwrite from props again.
-  // Statuses applied during this session are kept in local state;
-  // statuses from previous sessions are loaded via useState initialiser.
   const [localActions, setLocalActions] = useState<ProposedAction[] | undefined>(proposedActions)
+  const userInteracted = useRef(false)
+
+  // Sync prop changes (e.g. streaming adds a new proposed action) until the
+  // user has applied or dismissed an action. After that, local state is king.
+  useEffect(() => {
+    if (!userInteracted.current) {
+      setLocalActions(proposedActions)
+    }
+  }, [proposedActions])
 
   function handleLocalUpdate(index: number, status: string) {
+    userInteracted.current = true
     setLocalActions(prev => {
       if (!prev) return prev
       const updated = [...prev]
@@ -206,7 +213,7 @@ function ActionCard({ action, messageId, actionIndex, onLocalUpdate }: {
       {action.verification_note && (
         <div className="text-[11px] text-danger mt-1">{action.verification_note}</div>
       )}
-      {action.status === 'pending' && (
+      {(!action.status || action.status === 'pending') && (
         <div className="flex gap-2 mt-2">
           <button onClick={handleApply} disabled={!!loading}
             className="px-3 py-1 bg-accent text-white text-[11px] font-semibold rounded-lg hover:bg-accent-hover disabled:opacity-50">
