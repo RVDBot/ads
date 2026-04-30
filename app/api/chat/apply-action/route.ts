@@ -474,9 +474,13 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
           resource: resourceName as any,
         }])
       } catch (removeErr) {
-        const msg = removeErr instanceof Error ? removeErr.message : String(removeErr)
-        if (!/CANNOT_OPERATE_ON_REMOVED/i.test(msg)) throw removeErr
-        log('info', 'google-ads', 'Ad al verwijderd, remove stap overgeslagen', { resourceName })
+        // google-ads-api throws plain objects, not Error instances — use JSON.stringify to inspect
+        const serialized = (() => {
+          try { return JSON.stringify(removeErr) } catch { return String(removeErr) }
+        })()
+        const isAlreadyRemoved = /CANNOT_OPERATE_ON_REMOVED|Removed ads may not/i.test(serialized)
+        log('info', 'google-ads', isAlreadyRemoved ? 'Ad al verwijderd, remove stap overgeslagen' : 'Remove mislukt', { resourceName, error: serialized.slice(0, 300) })
+        if (!isAlreadyRemoved) throw removeErr
       }
 
       // Create new ad
