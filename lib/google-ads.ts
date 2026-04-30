@@ -448,6 +448,7 @@ export async function syncAds() {
       ad_group_ad.ad.id,
       ad_group_ad.ad.responsive_search_ad.headlines,
       ad_group_ad.ad.responsive_search_ad.descriptions,
+      ad_group_ad.ad.final_urls,
       ad_group_ad.status,
       ad_group.id
     FROM ad_group_ad
@@ -457,10 +458,11 @@ export async function syncAds() {
 
   const findAdGroup = db.prepare('SELECT id FROM ad_groups WHERE google_adgroup_id = ?')
   const stmt = db.prepare(`
-    INSERT INTO ads (google_ad_id, adgroup_id, headlines, descriptions, status)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO ads (google_ad_id, adgroup_id, headlines, descriptions, final_urls, status)
+    VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(google_ad_id) DO UPDATE SET
-      headlines = excluded.headlines, descriptions = excluded.descriptions, status = excluded.status
+      headlines = excluded.headlines, descriptions = excluded.descriptions,
+      final_urls = excluded.final_urls, status = excluded.status
   `)
 
   let skipped = 0
@@ -470,9 +472,11 @@ export async function syncAds() {
       if (!ag) { skipped++; continue }
       const headlines = (row.ad_group_ad?.ad?.responsive_search_ad?.headlines || []).map((h: any) => h.text)
       const descriptions = (row.ad_group_ad?.ad?.responsive_search_ad?.descriptions || []).map((d: any) => d.text)
+      const finalUrls = row.ad_group_ad?.ad?.final_urls || []
       stmt.run(
         String(row.ad_group_ad?.ad?.id), ag.id,
         JSON.stringify(headlines), JSON.stringify(descriptions),
+        JSON.stringify(finalUrls),
         String(row.ad_group_ad?.status || 'ENABLED')
       )
     }

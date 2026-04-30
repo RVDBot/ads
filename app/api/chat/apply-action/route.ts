@@ -360,26 +360,44 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
       // Use locally synced ads table — live GAQL query for resource_name is unreliable
       const db2 = getDb()
       const adRow = db2.prepare(`
-        SELECT a.google_ad_id, a.status
+        SELECT a.google_ad_id, a.status, a.final_urls
         FROM ads a
         JOIN ad_groups ag ON ag.id = a.adgroup_id
         WHERE ag.google_adgroup_id = ? AND a.status != 'REMOVED'
         LIMIT 1
-      `).get(String(details.google_adgroup_id)) as { google_ad_id: string; status: string } | undefined
+      `).get(String(details.google_adgroup_id)) as { google_ad_id: string; status: string; final_urls: string } | undefined
 
-      const headlines = Array.isArray(details.headlines)
-        ? (details.headlines as string[]).map(t => ({ text: t }))
-        : []
-      const descriptions = Array.isArray(details.descriptions)
-        ? (details.descriptions as string[]).map(t => ({ text: t }))
-        : []
+      // Google Ads limits: headlines max 30 chars, descriptions max 90 chars
+      const headlines = (Array.isArray(details.headlines) ? details.headlines as string[] : [])
+        .slice(0, 15)
+        .map(t => ({ text: String(t).slice(0, 30) }))
+      const descriptions = (Array.isArray(details.descriptions) ? details.descriptions as string[] : [])
+        .slice(0, 4)
+        .map(t => ({ text: String(t).slice(0, 90) }))
 
       if (!adRow) {
-        // No existing ad — create a new RSA
-        log('info', 'google-ads', 'Geen bestaande RSA gevonden — nieuwe advertentie aanmaken', {
+        // No existing ad — create a new RSA; look up final_urls from another ad in this campaign
+        const urlRow = db2.prepare(`
+          SELECT a.final_urls
+          FROM ads a
+          JOIN ad_groups ag ON ag.id = a.adgroup_id
+          JOIN campaigns c ON c.id = ag.campaign_id
+          JOIN ad_groups ag2 ON ag2.campaign_id = c.id AND ag2.google_adgroup_id = ?
+          WHERE a.final_urls != '[]' AND a.final_urls IS NOT NULL
+          LIMIT 1
+        `).get(String(details.google_adgroup_id)) as { final_urls: string } | undefined
+
+        const finalUrls: string[] = urlRow ? JSON.parse(urlRow.final_urls || '[]') : []
+        if (finalUrls.length === 0) {
+          throw new Error('Geen final_url gevonden voor nieuwe advertentie — sync eerst de bestaande ads')
+        }
+
+        log('info', 'google-ads', 'Geen bestaande RSA — nieuwe advertentie aanmaken', {
           google_adgroup_id: details.google_adgroup_id,
           adgroup_name: details.adgroup_name,
-          headlines: headlines.map(h => h.text),
+          final_urls: finalUrls,
+          headline_count: headlines.length,
+          description_count: descriptions.length,
         })
         return customer.mutateResources([{
           entity: 'ad_group_ad' as const,
@@ -388,6 +406,7 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
             ad_group: `customers/${details.customer_id}/adGroups/${details.google_adgroup_id}`,
             status: 'ENABLED',
             ad: {
+              final_urls: finalUrls,
               responsive_search_ad: { headlines, descriptions },
             },
           },
@@ -398,7 +417,8 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
       log('info', 'google-ads', 'Bestaande RSA updaten', {
         google_adgroup_id: details.google_adgroup_id,
         google_ad_id: adRow.google_ad_id,
-        ad_status: adRow.status,
+        headline_count: headlines.length,
+        description_count: descriptions.length,
       })
       const resourceName = `customers/${details.customer_id}/adGroupAds/${details.google_adgroup_id}~${adRow.google_ad_id}`
       return customer.mutateResources([{

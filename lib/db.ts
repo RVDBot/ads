@@ -123,6 +123,7 @@ function initSchema(db: Database.Database) {
       google_ad_id TEXT NOT NULL UNIQUE,
       headlines TEXT NOT NULL DEFAULT '[]',
       descriptions TEXT NOT NULL DEFAULT '[]',
+      final_urls TEXT NOT NULL DEFAULT '[]',
       status TEXT NOT NULL DEFAULT 'ENABLED',
       FOREIGN KEY (adgroup_id) REFERENCES ad_groups(id) ON DELETE CASCADE
     );
@@ -288,5 +289,10 @@ function initSchema(db: Database.Database) {
   const agCols = db.prepare("PRAGMA table_info(ad_groups)").all() as Array<{ name: string }>
   if (!agCols.some(c => c.name === 'cpc_bid')) {
     db.exec('ALTER TABLE ad_groups ADD COLUMN cpc_bid REAL')
+  }
+
+  const adsCols = db.prepare("PRAGMA table_info(ads)").all() as Array<{ name: string }>
+  if (!adsCols.some(c => c.name === 'final_urls')) {
+    db.exec("ALTER TABLE ads ADD COLUMN final_urls TEXT NOT NULL DEFAULT '[]'")
   }
 }
