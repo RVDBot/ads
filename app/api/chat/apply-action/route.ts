@@ -3,7 +3,7 @@ import { getDb } from '@/lib/db'
 import { requireAuth } from '@/lib/auth-guard'
 import { getSetting } from '@/lib/settings'
 import { log } from '@/lib/logger'
-import { getGoogleAdsClient } from '@/lib/google-ads'
+import { getGoogleAdsClient, syncAds, syncAdGroups } from '@/lib/google-ads'
 
 interface ApplyActionBody {
   message_id: number
@@ -646,6 +646,13 @@ export async function POST(req: NextRequest) {
     }
 
     const googleResponse = await applyAction(action.type, details)
+
+    // After ad mutations: sync ads (and ad groups for adgroup_create) in background
+    if (action.type === 'ad_text_change') {
+      syncAds().catch(e => log('warn', 'google-ads', 'Post-actie syncAds mislukt', { error: e instanceof Error ? e.message : String(e) }))
+    } else if (action.type === 'adgroup_create') {
+      Promise.all([syncAdGroups(), syncAds()]).catch(e => log('warn', 'google-ads', 'Post-actie sync mislukt', { error: e instanceof Error ? e.message : String(e) }))
+    }
 
     // Verify the action was actually applied
     const verification = await verifyAction(action.type, details)
