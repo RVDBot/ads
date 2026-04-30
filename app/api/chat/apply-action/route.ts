@@ -527,15 +527,23 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         headline_count: acHeadlines.length,
         description_count: acDescriptions.length,
       })
-      return customer.mutateResources([{
-        entity: 'ad_group_ad' as const,
-        operation: 'create' as const,
-        resource: {
-          ad_group: `customers/${details.customer_id}/adGroups/${details.google_adgroup_id}`,
-          status: 'ENABLED',
-          ad: { final_urls: acFinalUrls, responsive_search_ad: { headlines: acHeadlines, descriptions: acDescriptions } },
-        },
-      }])
+      try {
+        return await customer.mutateResources([{
+          entity: 'ad_group_ad' as const,
+          operation: 'create' as const,
+          resource: {
+            ad_group: `customers/${details.customer_id}/adGroups/${details.google_adgroup_id}`,
+            status: 'ENABLED',
+            ad: { final_urls: acFinalUrls, responsive_search_ad: { headlines: acHeadlines, descriptions: acDescriptions } },
+          },
+        }])
+      } catch (e) {
+        const s = (() => { try { return JSON.stringify(e) } catch { return String(e) } })()
+        if (/resource_count_limit_exceeded|RESOURCE_LIMIT/i.test(s)) {
+          throw new Error('Deze ad group heeft al het maximum aantal advertenties (3 RSAs per ad group). Gebruik "Advertentie wijzigen" om een bestaande advertentie te vervangen, of verwijder eerst een bestaande advertentie via Google Ads.')
+        }
+        throw e
+      }
     }
 
     case 'adgroup_create': {
@@ -693,7 +701,7 @@ export async function POST(req: NextRequest) {
     const googleResponse = await applyAction(action.type, details)
 
     // After ad mutations: sync ads (and ad groups for adgroup_create) in background
-    if (action.type === 'ad_text_change' || action.type === 'ad_create') {
+    if (action.type === 'ad_text_change') {
       syncAds().catch(e => log('warn', 'google-ads', 'Post-actie syncAds mislukt', { error: e instanceof Error ? e.message : String(e) }))
     } else if (action.type === 'adgroup_create') {
       Promise.all([syncAdGroups(), syncAds()]).catch(e => log('warn', 'google-ads', 'Post-actie sync mislukt', { error: e instanceof Error ? e.message : String(e) }))
