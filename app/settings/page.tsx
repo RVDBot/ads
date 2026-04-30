@@ -304,7 +304,7 @@ export default function SettingsPage() {
             Instellingen
           </h1>
           <span className="text-text-tertiary text-[11px]">
-            v{process.env.NEXT_PUBLIC_GIT_HASH || 'dev'}
+            {process.env.NEXT_PUBLIC_GIT_HASH || 'dev'}
           </span>
         </div>
 
@@ -562,7 +562,7 @@ export default function SettingsPage() {
         </div>
 
         <div className="mt-6 text-center text-text-tertiary text-[11px]">
-          Ads Optimizer v{process.env.NEXT_PUBLIC_GIT_HASH || 'dev'}
+          Ads Optimizer {process.env.NEXT_PUBLIC_GIT_HASH || 'dev'}
         </div>
       </div>
     </div>
