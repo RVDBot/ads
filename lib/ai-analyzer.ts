@@ -286,9 +286,10 @@ Gebruik ALTIJD de exacte campagne- en ad group namen uit de data hierboven. Het 
 - **ad_text_change**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "headlines": ["headline1"], "descriptions": ["desc1"], "final_url": "https://..." } — ALLEEN voor aanpassen van een BESTAANDE advertentie (verwijdert oude, maakt nieuwe)
 - **ad_create**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "headlines": ["h1","h2","h3"], "descriptions": ["d1","d2"], "final_url": "https://..." } — voor een NIEUWE advertentie in een bestaande ad group (geen verwijdering)
 - **adgroup_create**: { "campaign_name": "exacte naam", "adgroup_name": "nieuwe naam", "cpc_bid": 0.50, "headlines": ["h1","h2","h3"], "descriptions": ["d1","d2"], "final_url": "https://..." } — gebruik dit voor nieuwe ad groups, NIET ad_text_change of ad_create
-- **campaign_targeting**: { "campaign_name": "exacte naam", "country": "nl" } — stelt geo-targeting (locatie) en taal in voor een campagne; country = nl/de/fr/es/it/be/at/ch/com/gb/us/etc
-- **new_campaign**: { "campaign_name": "voorgestelde naam", "country": "nl", "type": "SEARCH|SHOPPING", "daily_budget": 10.0, "keywords": ["kw1"], "headlines": ["headline1", "headline2", "headline3"], "descriptions": ["desc1", "desc2"] }
-  (SEARCH: verplicht 3+ headlines max 30 tekens INCL. SPATIES, 2+ descriptions max 90 tekens INCL. SPATIES — tel elk karakter, in de taal van het land. SHOPPING: headlines/descriptions weglaten.)
+- **campaign_targeting**: { "campaign_name": "exacte naam", "country": "nl" } — stelt geo-targeting en taal in; country = nl/de/fr/es/it/be/at/ch/com/gb/us/etc
+- **campaign_bid_strategy**: { "campaign_name": "exacte naam", "strategy": "maximize_clicks", "target_cpa": 5.00, "target_roas": 3.0 } — kies strategie op basis van data: maximize_clicks (nieuw, geen conversiedata), maximize_conversions (wel conversies, geen target), target_cpa (>30 conv/maand, stuur op kosten per conversie), target_roas (>50 conv/maand, stuur op ROAS), maximize_conversion_value (Shopping met ROAS-doel), manual_cpc (handmatige controle gewenst)
+- **new_campaign**: { "campaign_name": "voorgestelde naam", "country": "nl", "type": "SEARCH|SHOPPING", "daily_budget": 10.0, "bid_strategy": "maximize_clicks", "keywords": ["kw1"], "headlines": ["headline1", "headline2", "headline3"], "descriptions": ["desc1", "desc2"] }
+  (SEARCH: verplicht 3+ headlines max 30 tekens INCL. SPATIES, 2+ descriptions max 90 tekens INCL. SPATIES — tel elk karakter, in de taal van het land. SHOPPING: headlines/descriptions weglaten. bid_strategy: gebruik maximize_clicks voor nieuwe campagnes zonder conversiedata, target_cpa als er >30 conv/maand verwacht worden, target_roas voor Shopping met ROAS-doel.)
 - **schedule_change**: { "campaign_name": "exacte naam", "schedule": "beschrijving van wijziging" }`
 
   const userMessage = `## Campagnes (laatste ${period} dagen)
@@ -442,8 +443,8 @@ Antwoord ALLEEN met een JSON object (GEEN markdown code fences). Max 10 findings
 }
 
 ## Details-velden per type
-- **new_campaign**: { "campaign_name": "naam", "country": "nl", "type": "SEARCH|SHOPPING", "daily_budget": 10.0, "keywords": ["kw1"], "headlines": ["headline1", "headline2", "headline3"], "descriptions": ["desc1", "desc2"] }
-  (SEARCH: verplicht 3+ headlines max 30 tekens INCL. SPATIES, 2+ descriptions max 90 tekens INCL. SPATIES — tel elk karakter, in de taal van het land. SHOPPING: headlines/descriptions weglaten.)
+- **new_campaign**: { "campaign_name": "naam", "country": "nl", "type": "SEARCH|SHOPPING", "daily_budget": 10.0, "bid_strategy": "maximize_clicks", "keywords": ["kw1"], "headlines": ["headline1", "headline2", "headline3"], "descriptions": ["desc1", "desc2"] }
+  (SEARCH: verplicht 3+ headlines max 30 tekens INCL. SPATIES, 2+ descriptions max 90 tekens INCL. SPATIES — tel elk karakter, in de taal van het land. SHOPPING: headlines/descriptions weglaten. bid_strategy: gebruik maximize_clicks voor nieuwe campagnes zonder conversiedata, target_cpa als er >30 conv/maand verwacht worden, target_roas voor Shopping met ROAS-doel.)
 - **keyword_add**: { "campaign_name": "exacte naam", "adgroup_name": "exacte naam", "keywords": ["kw1", "kw2"], "match_type": "PHRASE|EXACT|BROAD" }
 - **market_expansion**: { "target_country": "at", "source_country": "de", "rationale": "uitleg", "recommended_budget": 10.0, "recommended_campaign_type": "SEARCH|SHOPPING" }`
 
