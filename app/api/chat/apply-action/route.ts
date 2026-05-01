@@ -348,30 +348,30 @@ async function mutateCampaignBidStrategyRest(
   })
   const { access_token } = await tokenRes.json() as { access_token: string }
 
-  // Build strategy update (REST uses camelCase)
+  // Build strategy update (campaigns:mutate REST endpoint uses snake_case field names)
   type StrategyPayload = Record<string, unknown>
   let strategyField: string
   let strategyValue: StrategyPayload
 
   switch (strategy.toLowerCase()) {
     case 'maximize_clicks':
-      strategyField = 'maximizeClicks'; strategyValue = {}; break
+      strategyField = 'maximize_clicks'; strategyValue = {}; break
     case 'maximize_conversions':
-      strategyField = 'maximizeConversions'; strategyValue = {}; break
+      strategyField = 'maximize_conversions'; strategyValue = {}; break
     case 'maximize_conversion_value':
-      strategyField = 'maximizeConversionValue'
-      strategyValue = details.target_roas ? { targetRoas: Number(details.target_roas) } : {}
+      strategyField = 'maximize_conversion_value'
+      strategyValue = details.target_roas ? { target_roas: Number(details.target_roas) } : {}
       break
     case 'target_cpa':
-      strategyField = 'targetCpa'
-      strategyValue = { targetCpaMicros: String(Math.round(Number(details.target_cpa || 0) * 1_000_000)) }
+      strategyField = 'target_cpa'
+      strategyValue = { target_cpa_micros: String(Math.round(Number(details.target_cpa || 0) * 1_000_000)) }
       break
     case 'target_roas':
-      strategyField = 'targetRoas'
-      strategyValue = { targetRoas: Number(details.target_roas || 0) }
+      strategyField = 'target_roas'
+      strategyValue = { target_roas: Number(details.target_roas || 0) }
       break
     default: // manual_cpc
-      strategyField = 'manualCpc'; strategyValue = { enhancedCpcEnabled: false }; break
+      strategyField = 'manual_cpc'; strategyValue = { enhanced_cpc_enabled: false }; break
   }
 
   const headers: Record<string, string> = {
@@ -383,9 +383,9 @@ async function mutateCampaignBidStrategyRest(
 
   const body = {
     operations: [{
-      updateMask: strategyField,
+      update_mask: strategyField,
       update: {
-        resourceName: `customers/${customerId}/campaigns/${campaignId}`,
+        resource_name: `customers/${customerId}/campaigns/${campaignId}`,
         [strategyField]: strategyValue,
       },
     }],
