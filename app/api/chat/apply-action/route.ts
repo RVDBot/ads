@@ -298,15 +298,21 @@ const LANGUAGE_CODE_MAP: Record<string, string> = {
 }
 
 function applyBidStrategy(resource: Record<string, unknown>, strategy: string, details: Record<string, unknown>) {
+  // NOTE: google-ads-api's getFieldMask skips empty objects ({}) — they generate no
+  // field mask path so the API silently ignores the mutation. Every strategy object
+  // must contain at least one primitive field so the path is included in the mask.
   switch (strategy.toLowerCase()) {
     case 'maximize_clicks':
-      resource.maximize_clicks = {}
+      // target_spend_micros: 0 = no spend limit (default). Must be present for field mask.
+      resource.maximize_clicks = { target_spend_micros: 0 }
       break
     case 'maximize_conversions':
-      resource.maximize_conversions = {}
+      // target_cpa_micros: 0 = no CPA target. Must be present for field mask.
+      resource.maximize_conversions = { target_cpa_micros: 0 }
       break
     case 'maximize_conversion_value':
-      resource.maximize_conversion_value = details.target_roas ? { target_roas: Number(details.target_roas) } : {}
+      // target_roas: 0 = no ROAS target. Must be present for field mask.
+      resource.maximize_conversion_value = { target_roas: Number(details.target_roas || 0) }
       break
     case 'target_cpa':
       resource.target_cpa = { target_cpa_micros: Math.round(Number(details.target_cpa || 0) * 1_000_000) }
