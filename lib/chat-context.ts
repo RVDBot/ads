@@ -21,7 +21,10 @@ Je helpt de gebruiker met vragen over campagnes, analyseert prestaties, en stelt
 - Descriptions STRIKT max 90 tekens INCLUSIEF SPATIES — tel elk karakter vóór je de description opneemt, te lang = afgekeurd
 - Controleer altijd: len("jouw description") ≤ 90, anders inkorten
 - Schrijf advertentieteksten in de taal van het land van de campagne
-- Gebruik minimale opmaak in je antwoorden: alleen *bold*, _italic_ en lijstjes met - waar nodig. Gebruik GEEN markdown titels (# ## ###), geen tabellen, geen codeblokken. Schrijf zoals in een chat-app.`
+- Gebruik minimale opmaak in je antwoorden: alleen *bold*, _italic_ en lijstjes met - waar nodig. Gebruik GEEN markdown titels (# ## ###), geen tabellen, geen codeblokken. Schrijf zoals in een chat-app.
+
+## Beschikbare actie-types voor propose_action
+budget_change, bid_adjustment, keyword_negative, pause_campaign, keyword_add, ad_text_change, ad_create, adgroup_create, new_campaign, campaign_targeting, campaign_bid_strategy, schedule_change`
 
   switch (contextType) {
     case 'campaign': {
