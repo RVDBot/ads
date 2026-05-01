@@ -103,6 +103,23 @@ const PERIODS = [
   { days: 90, label: '90d' },
 ]
 
+function formatBidStrategy(strategy: string | null, targetRoas: number | null): string {
+  if (!strategy) return '—'
+  const map: Record<string, string> = {
+    MAXIMIZE_CLICKS: 'Max. klikken',
+    MAXIMIZE_CONVERSIONS: 'Max. conversies',
+    MAXIMIZE_CONVERSION_VALUE: 'Max. conv. waarde',
+    TARGET_CPA: 'Doel CPA',
+    TARGET_ROAS: 'Doel ROAS',
+    MANUAL_CPC: 'Handmatige CPC',
+    ENHANCED_CPC: 'Verbeterde CPC',
+    TARGET_IMPRESSION_SHARE: 'Vertoningsaandeel',
+  }
+  const label = map[strategy] || strategy
+  if (strategy === 'TARGET_ROAS' && targetRoas) return `${label} (${targetRoas.toFixed(1)}x)`
+  return label
+}
+
 function statusDotColor(status: string): string {
   if (status === 'ENABLED' || status === '2') return '#0f9960'
   if (status === 'PAUSED' || status === '3') return '#8b9098'
@@ -443,17 +460,18 @@ export default function CampaignDetailPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-5 gap-3 mb-5">
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-5">
           {([
             [`Kosten (${days}d)`, formatCurrency(totals.cost), ''],
             ['ROAS', formatRoas(avgRoas), avgRoas >= 3 ? 'text-success' : avgRoas >= 1 ? 'text-warning' : 'text-danger'],
             ['Klikken', totals.clicks.toLocaleString('nl-NL'), ''],
             ['Conversies', Math.round(totals.conversions).toLocaleString('nl-NL'), ''],
             ['Budget/dag', campaign.daily_budget ? formatCurrency(campaign.daily_budget) : '\u2014', ''],
+            ['Biedstrategie', formatBidStrategy(campaign.bid_strategy, campaign.target_roas), ''],
           ] as const).map(([label, value, color]) => (
             <div key={label} className="bg-surface-1 border border-border-subtle rounded-xl p-3">
               <div className="text-text-tertiary text-[11px] font-medium mb-1">{label}</div>
-              <div className={`text-[16px] font-semibold ${color || 'text-text-primary'}`}>{value}</div>
+              <div className={`text-[14px] font-semibold ${color || 'text-text-primary'}`}>{value}</div>
             </div>
           ))}
         </div>
