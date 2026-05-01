@@ -297,22 +297,19 @@ const LANGUAGE_CODE_MAP: Record<string, string> = {
   norwegian: 'languageConstants/1013',
 }
 
+// For new_campaign CREATE mutations only — sets the bidding strategy field on the resource object.
+// UPDATE mutations must use mutateCampaignBidStrategyRest() because mutateResources() cannot
+// produce the correct field mask for top-level message fields set to empty objects.
 function applyBidStrategy(resource: Record<string, unknown>, strategy: string, details: Record<string, unknown>) {
-  // NOTE: google-ads-api's getFieldMask skips empty objects ({}) — they generate no
-  // field mask path so the API silently ignores the mutation. Every strategy object
-  // must contain at least one primitive field so the path is included in the mask.
   switch (strategy.toLowerCase()) {
     case 'maximize_clicks':
-      // target_spend_micros: 0 = no spend limit (default). Must be present for field mask.
-      resource.maximize_clicks = { target_spend_micros: 0 }
+      resource.maximize_clicks = {}
       break
     case 'maximize_conversions':
-      // target_cpa_micros: 0 = no CPA target. Must be present for field mask.
-      resource.maximize_conversions = { target_cpa_micros: 0 }
+      resource.maximize_conversions = {}
       break
     case 'maximize_conversion_value':
-      // target_roas: 0 = no ROAS target. Must be present for field mask.
-      resource.maximize_conversion_value = { target_roas: Number(details.target_roas || 0) }
+      resource.maximize_conversion_value = details.target_roas ? { target_roas: Number(details.target_roas) } : {}
       break
     case 'target_cpa':
       resource.target_cpa = { target_cpa_micros: Math.round(Number(details.target_cpa || 0) * 1_000_000) }
@@ -323,6 +320,85 @@ function applyBidStrategy(resource: Record<string, unknown>, strategy: string, d
     default: // manual_cpc
       resource.manual_cpc = { enhanced_cpc_enabled: false }
   }
+}
+
+// Bidding strategy UPDATE via REST API with explicit updateMask.
+// The google-ads-api library auto-generates field masks and skips empty objects,
+// making it impossible to set strategies like maximize_clicks via mutateResources.
+async function mutateCampaignBidStrategyRest(
+  customerId: string,
+  campaignId: string,
+  strategy: string,
+  details: Record<string, unknown>,
+) {
+  const token = getSetting('google_ads_developer_token')
+  const mccId = getSetting('google_ads_mcc_id')
+  const clientId = getSetting('google_ads_client_id')
+  const clientSecret = getSetting('google_ads_client_secret')
+  const refreshToken = getSetting('google_ads_refresh_token')
+
+  // Get fresh access token
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId!, client_secret: clientSecret!,
+      refresh_token: refreshToken!, grant_type: 'refresh_token',
+    }),
+  })
+  const { access_token } = await tokenRes.json() as { access_token: string }
+
+  // Build strategy update (REST uses camelCase)
+  type StrategyPayload = Record<string, unknown>
+  let strategyField: string
+  let strategyValue: StrategyPayload
+
+  switch (strategy.toLowerCase()) {
+    case 'maximize_clicks':
+      strategyField = 'maximizeClicks'; strategyValue = {}; break
+    case 'maximize_conversions':
+      strategyField = 'maximizeConversions'; strategyValue = {}; break
+    case 'maximize_conversion_value':
+      strategyField = 'maximizeConversionValue'
+      strategyValue = details.target_roas ? { targetRoas: Number(details.target_roas) } : {}
+      break
+    case 'target_cpa':
+      strategyField = 'targetCpa'
+      strategyValue = { targetCpaMicros: String(Math.round(Number(details.target_cpa || 0) * 1_000_000)) }
+      break
+    case 'target_roas':
+      strategyField = 'targetRoas'
+      strategyValue = { targetRoas: Number(details.target_roas || 0) }
+      break
+    default: // manual_cpc
+      strategyField = 'manualCpc'; strategyValue = { enhancedCpcEnabled: false }; break
+  }
+
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${access_token}`,
+    'developer-token': token!,
+    'Content-Type': 'application/json',
+  }
+  if (mccId) headers['login-customer-id'] = mccId
+
+  const body = {
+    operations: [{
+      updateMask: strategyField,
+      update: {
+        resourceName: `customers/${customerId}/campaigns/${campaignId}`,
+        [strategyField]: strategyValue,
+      },
+    }],
+  }
+
+  const res = await fetch(`https://googleads.googleapis.com/v23/customers/${customerId}/campaigns:mutate`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  })
+  const json = await res.json()
+  if (!res.ok) throw new Error(`Google Ads REST fout: ${JSON.stringify(json)}`)
+  return json
 }
 
 async function applyTargeting(
@@ -614,16 +690,14 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
 
     case 'campaign_bid_strategy': {
       if (!details.google_campaign_id) throw new Error('Campagne niet gevonden voor bid strategy aanpassing')
-      const bsResource: Record<string, unknown> = {
-        resource_name: `customers/${details.customer_id}/campaigns/${details.google_campaign_id}`,
-      }
-      applyBidStrategy(bsResource, String(details.strategy || 'maximize_clicks'), details)
-      log('info', 'google-ads', `Bid strategy gewijzigd naar ${details.strategy}`, { campaign_id: details.google_campaign_id })
-      return customer.mutateResources([{
-        entity: 'campaign' as const,
-        operation: 'update' as const,
-        resource: bsResource,
-      }])
+      const strategy = String(details.strategy || 'maximize_clicks')
+      log('info', 'google-ads', `Bid strategy gewijzigd naar ${strategy}`, { campaign_id: details.google_campaign_id })
+      return mutateCampaignBidStrategyRest(
+        String(details.customer_id),
+        String(details.google_campaign_id),
+        strategy,
+        details,
+      )
     }
 
     case 'campaign_targeting': {
