@@ -23,8 +23,11 @@ Je helpt de gebruiker met vragen over campagnes, analyseert prestaties, en stelt
 - Schrijf advertentieteksten in de taal van het land van de campagne
 - Gebruik minimale opmaak in je antwoorden: alleen *bold*, _italic_ en lijstjes met - waar nodig. Gebruik GEEN markdown titels (# ## ###), geen tabellen, geen codeblokken. Schrijf zoals in een chat-app.
 
-## Beschikbare actie-types voor propose_action
-budget_change, bid_adjustment, keyword_negative, pause_campaign, keyword_add, ad_text_change, ad_create, adgroup_create, new_campaign, campaign_targeting, campaign_bid_strategy, schedule_change`
+## propose_action tool — geldige type-waarden
+De volgende types zijn ALLEMAAL geldig als "type" parameter in de propose_action tool:
+budget_change | bid_adjustment | keyword_negative | pause_campaign | keyword_add | ad_text_change | ad_create | adgroup_create | new_campaign | campaign_targeting | campaign_bid_strategy | schedule_change
+
+Voor campaign_bid_strategy gebruik je: { "campaign_name": "exacte naam", "strategy": "maximize_clicks" } (strategy opties: maximize_clicks, maximize_conversions, maximize_conversion_value, target_cpa, target_roas, manual_cpc)`
 
   switch (contextType) {
     case 'campaign': {
