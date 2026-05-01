@@ -323,10 +323,10 @@ async function applyTargeting(
   customer: ReturnType<typeof getGoogleAdsClient>,
   customerId: string,
   campaignId: string,
-  country: string,
+  countries: string | string[],
   languageOverrides?: string[],
 ) {
-  const countryLower = country.toLowerCase()
+  const countryList = (Array.isArray(countries) ? countries : [countries]).map(c => c.toLowerCase())
   const campaignResource = `customers/${customerId}/campaigns/${campaignId}`
 
   // Remove existing location + language criteria first
@@ -349,27 +349,31 @@ async function applyTargeting(
     } catch { /* ignore remove errors */ }
   }
 
-  // Add location targeting
-  const geoTarget = GEO_TARGETS[countryLower]
-  if (geoTarget) {
-    await customer.mutateResources([{
-      entity: 'campaign_criterion' as const,
-      operation: 'create' as const,
-      resource: {
-        campaign: campaignResource,
-        location: { geo_target_constant: geoTarget },
-      },
-    }])
+  // Add location targeting for each country
+  for (const countryLower of countryList) {
+    const geoTarget = GEO_TARGETS[countryLower]
+    if (geoTarget) {
+      await customer.mutateResources([{
+        entity: 'campaign_criterion' as const,
+        operation: 'create' as const,
+        resource: {
+          campaign: campaignResource,
+          location: { geo_target_constant: geoTarget },
+        },
+      }])
+    }
   }
 
-  // Resolve languages: explicit overrides or derive from country
+  // Resolve languages: explicit overrides or union of country defaults (deduplicated)
   let languages: string[]
   if (languageOverrides && languageOverrides.length > 0) {
-    languages = languageOverrides
-      .map(l => LANGUAGE_CODE_MAP[l.toLowerCase()])
-      .filter(Boolean)
+    languages = [...new Set(languageOverrides.map(l => LANGUAGE_CODE_MAP[l.toLowerCase()]).filter(Boolean))]
   } else {
-    languages = LANGUAGE_TARGETS[countryLower] || []
+    const langSet = new Set<string>()
+    for (const countryLower of countryList) {
+      for (const lang of LANGUAGE_TARGETS[countryLower] || []) langSet.add(lang)
+    }
+    languages = [...langSet]
   }
 
   for (const lang of languages) {
@@ -383,7 +387,7 @@ async function applyTargeting(
     }])
   }
 
-  log('info', 'google-ads', `Targeting ingesteld voor campagne ${campaignId}`, { country: countryLower, geoTarget, languages })
+  log('info', 'google-ads', `Targeting ingesteld voor campagne ${campaignId}`, { countries: countryList, languages })
 }
 
 async function applyAction(actionType: string, details: Record<string, unknown>): Promise<unknown> {
@@ -587,7 +591,9 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
       }])
 
       // Apply geo + language targeting
-      const country = ((details.country as string) || 'nl').toLowerCase()
+      const newCampCountries = Array.isArray(details.countries)
+        ? (details.countries as string[])
+        : [((details.country as string) || 'nl').toLowerCase()]
       const newCampRows = await customer.query(`
         SELECT campaign.id FROM campaign
         WHERE campaign.name = '${campaignName.replace(/'/g, "\\'")}' LIMIT 1
@@ -595,9 +601,9 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
       const newCampId = String((newCampRows[0] as any)?.campaign?.id || '')
       const newCampLangOverrides = Array.isArray(details.languages) ? details.languages as string[] : undefined
       if (newCampId) {
-        await applyTargeting(customer, String(details.customer_id), newCampId, country, newCampLangOverrides)
+        await applyTargeting(customer, String(details.customer_id), newCampId, newCampCountries, newCampLangOverrides)
       }
-      return { created: campaignName, targeting: country }
+      return { created: campaignName, targeting: newCampCountries }
     }
 
     case 'campaign_bid_strategy': {
@@ -616,10 +622,12 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
 
     case 'campaign_targeting': {
       if (!details.google_campaign_id) throw new Error('Campagne niet gevonden voor targeting aanpassing')
-      const targetCountry = String(details.country || 'nl').toLowerCase()
+      const targetCountries = Array.isArray(details.countries)
+        ? (details.countries as string[])
+        : [String(details.country || 'nl')]
       const langOverrides = Array.isArray(details.languages) ? details.languages as string[] : undefined
-      await applyTargeting(customer, String(details.customer_id), String(details.google_campaign_id), targetCountry, langOverrides)
-      return { campaign_id: details.google_campaign_id, country: targetCountry, languages: langOverrides }
+      await applyTargeting(customer, String(details.customer_id), String(details.google_campaign_id), targetCountries, langOverrides)
+      return { campaign_id: details.google_campaign_id, countries: targetCountries, languages: langOverrides }
     }
 
     case 'ad_text_change': {

@@ -28,7 +28,7 @@ De volgende types zijn ALLEMAAL geldig als "type" parameter in de propose_action
 budget_change | bid_adjustment | keyword_negative | keyword_pause | keyword_remove | pause_campaign | keyword_add | ad_text_change | ad_create | adgroup_create | new_campaign | campaign_targeting | campaign_bid_strategy | schedule_change
 
 Voor campaign_bid_strategy gebruik je: { "campaign_name": "exacte naam", "strategy": "maximize_clicks" } (strategy opties: maximize_clicks, maximize_conversions, maximize_conversion_value, target_cpa, target_roas, manual_cpc)
-Voor campaign_targeting gebruik je: { "campaign_name": "exacte naam", "country": "nl", "languages": ["nl"] } — languages is optioneel en overschrijft de standaard talen van het land`
+Voor campaign_targeting gebruik je: { "campaign_name": "exacte naam", "countries": ["nl","be"], "languages": ["nl","fr"] } — countries[] voor meerdere landen, country voor één land, languages optioneel`
 
   switch (contextType) {
     case 'campaign': {
