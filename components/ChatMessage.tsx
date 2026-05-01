@@ -23,6 +23,8 @@ const typeLabels: Record<string, string> = {
   budget_change: 'Budget wijziging',
   bid_adjustment: 'Bod aanpassing',
   keyword_negative: 'Negatief zoekwoord',
+  keyword_pause: 'Zoekwoord pauzeren',
+  keyword_remove: 'Zoekwoord verwijderen',
   pause_campaign: 'Campagne pauzeren',
   keyword_add: 'Zoekwoord toevoegen',
   ad_text_change: 'Advertentie wijzigen',

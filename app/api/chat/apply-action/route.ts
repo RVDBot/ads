@@ -78,6 +78,40 @@ function resolveGoogleIds(db: ReturnType<typeof getDb>, details: Record<string, 
     }
   }
 
+  if (details.keyword && !details.google_keyword_id) {
+    const agId = resolved.google_adgroup_id
+    let kw: any = null
+    if (agId) {
+      kw = db.prepare(`
+        SELECT k.google_keyword_id FROM keywords k
+        JOIN ad_groups ag ON ag.id = k.adgroup_id
+        WHERE ag.google_adgroup_id = ? AND LOWER(k.text) = LOWER(?) AND LOWER(k.match_type) LIKE LOWER(?)
+        LIMIT 1
+      `).get(agId, String(details.keyword), `%${details.match_type || ''}%`)
+      if (!kw) kw = db.prepare(`
+        SELECT k.google_keyword_id FROM keywords k
+        JOIN ad_groups ag ON ag.id = k.adgroup_id
+        WHERE ag.google_adgroup_id = ? AND LOWER(k.text) = LOWER(?)
+        LIMIT 1
+      `).get(agId, String(details.keyword))
+    }
+    if (!kw && resolved.google_campaign_id) {
+      kw = db.prepare(`
+        SELECT k.google_keyword_id FROM keywords k
+        JOIN ad_groups ag ON ag.id = k.adgroup_id
+        JOIN campaigns c ON c.id = ag.campaign_id
+        WHERE c.google_campaign_id = ? AND LOWER(k.text) = LOWER(?)
+        LIMIT 1
+      `).get(resolved.google_campaign_id, String(details.keyword))
+    }
+    if (kw) {
+      resolved.google_keyword_id = kw.google_keyword_id
+      log('info', 'google-ads', `Zoekwoord gevonden: "${details.keyword}" → ${kw.google_keyword_id}`)
+    } else {
+      log('warn', 'google-ads', `Zoekwoord niet gevonden in DB: "${details.keyword}"`)
+    }
+  }
+
   return resolved
 }
 
@@ -439,6 +473,27 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
           keyword: { text: kw, match_type: toMatchTypeEnum(details.match_type) },
         },
       })))
+    }
+
+    case 'keyword_pause': {
+      if (!details.google_keyword_id || !details.google_adgroup_id) throw new Error('Zoekwoord niet gevonden in database — voer eerst een sync uit')
+      return customer.mutateResources([{
+        entity: 'ad_group_criterion' as const,
+        operation: 'update' as const,
+        resource: {
+          resource_name: `customers/${details.customer_id}/adGroupCriteria/${details.google_adgroup_id}~${details.google_keyword_id}`,
+          status: 'PAUSED',
+        },
+      }])
+    }
+
+    case 'keyword_remove': {
+      if (!details.google_keyword_id || !details.google_adgroup_id) throw new Error('Zoekwoord niet gevonden in database — voer eerst een sync uit')
+      return customer.mutateResources([{
+        entity: 'ad_group_criterion' as const,
+        operation: 'remove' as const,
+        resource: `customers/${details.customer_id}/adGroupCriteria/${details.google_adgroup_id}~${details.google_keyword_id}` as any,
+      }])
     }
 
     case 'new_campaign': {

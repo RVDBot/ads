@@ -78,13 +78,13 @@ export const CHAT_TOOLS = [
       properties: {
         type: {
           type: 'string',
-          enum: ['budget_change', 'bid_adjustment', 'keyword_negative', 'pause_campaign', 'keyword_add', 'ad_text_change', 'ad_create', 'adgroup_create', 'new_campaign', 'campaign_targeting', 'campaign_bid_strategy', 'schedule_change'],
+          enum: ['budget_change', 'bid_adjustment', 'keyword_negative', 'keyword_pause', 'keyword_remove', 'pause_campaign', 'keyword_add', 'ad_text_change', 'ad_create', 'adgroup_create', 'new_campaign', 'campaign_targeting', 'campaign_bid_strategy', 'schedule_change'],
           description: 'Type actie',
         },
         title: { type: 'string', description: 'Korte beschrijving van de actie' },
         details: {
           type: 'object',
-          description: 'Actie-specifieke details. budget_change: {campaign_name, old_budget, new_budget}. keyword_negative: {campaign_name, keyword, match_type}. bid_adjustment: {campaign_name, adgroup_name, old_bid, new_bid}. pause_campaign: {campaign_name}. keyword_add: {campaign_name, adgroup_name, keywords[], match_type}. ad_text_change: {campaign_name, adgroup_name, headlines[], descriptions[], final_url}. ad_create: {campaign_name, adgroup_name, headlines[], descriptions[], final_url}. adgroup_create: {campaign_name, adgroup_name, cpc_bid?, headlines[]?, descriptions[]?, final_url?}. campaign_targeting: {campaign_name, country, languages?: ["nl","fr","de","es","it","en"]} — languages overschrijft de automatische taal op basis van country. campaign_bid_strategy: {campaign_name, strategy, target_cpa?, target_roas?} — strategy: maximize_clicks|maximize_conversions|maximize_conversion_value|target_cpa|target_roas|manual_cpc.',
+          description: 'Actie-specifieke details. budget_change: {campaign_name, old_budget, new_budget}. keyword_negative: {campaign_name, keyword, match_type}. keyword_pause: {campaign_name, adgroup_name, keyword, match_type} — pauzeert een bestaand zoekwoord. keyword_remove: {campaign_name, adgroup_name, keyword, match_type} — verwijdert een zoekwoord permanent. bid_adjustment: {campaign_name, adgroup_name, old_bid, new_bid}. pause_campaign: {campaign_name}. keyword_add: {campaign_name, adgroup_name, keywords[], match_type}. ad_text_change: {campaign_name, adgroup_name, headlines[], descriptions[], final_url}. ad_create: {campaign_name, adgroup_name, headlines[], descriptions[], final_url}. adgroup_create: {campaign_name, adgroup_name, cpc_bid?, headlines[]?, descriptions[]?, final_url?}. campaign_targeting: {campaign_name, country, languages?: ["nl","fr","de","es","it","en"]}. campaign_bid_strategy: {campaign_name, strategy, target_cpa?, target_roas?} — strategy: maximize_clicks|maximize_conversions|maximize_conversion_value|target_cpa|target_roas|manual_cpc.',
         },
       },
       required: ['type', 'title', 'details'],
