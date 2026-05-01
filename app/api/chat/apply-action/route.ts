@@ -239,6 +239,30 @@ const LANGUAGE_TARGETS: Record<string, string[]> = {
   no: ['languageConstants/1013'],             // Noors
 }
 
+// Language code → language constant (for explicit language overrides)
+const LANGUAGE_CODE_MAP: Record<string, string> = {
+  nl: 'languageConstants/1010',
+  dutch: 'languageConstants/1010',
+  de: 'languageConstants/1001',
+  german: 'languageConstants/1001',
+  fr: 'languageConstants/1002',
+  french: 'languageConstants/1002',
+  es: 'languageConstants/1003',
+  spanish: 'languageConstants/1003',
+  it: 'languageConstants/1004',
+  italian: 'languageConstants/1004',
+  en: 'languageConstants/1000',
+  english: 'languageConstants/1000',
+  pl: 'languageConstants/1020',
+  polish: 'languageConstants/1020',
+  da: 'languageConstants/1009',
+  danish: 'languageConstants/1009',
+  sv: 'languageConstants/1015',
+  swedish: 'languageConstants/1015',
+  no: 'languageConstants/1013',
+  norwegian: 'languageConstants/1013',
+}
+
 function applyBidStrategy(resource: Record<string, unknown>, strategy: string, details: Record<string, unknown>) {
   switch (strategy.toLowerCase()) {
     case 'maximize_clicks':
@@ -266,6 +290,7 @@ async function applyTargeting(
   customerId: string,
   campaignId: string,
   country: string,
+  languageOverrides?: string[],
 ) {
   const countryLower = country.toLowerCase()
   const campaignResource = `customers/${customerId}/campaigns/${campaignId}`
@@ -303,8 +328,16 @@ async function applyTargeting(
     }])
   }
 
-  // Add language targeting
-  const languages = LANGUAGE_TARGETS[countryLower] || []
+  // Resolve languages: explicit overrides or derive from country
+  let languages: string[]
+  if (languageOverrides && languageOverrides.length > 0) {
+    languages = languageOverrides
+      .map(l => LANGUAGE_CODE_MAP[l.toLowerCase()])
+      .filter(Boolean)
+  } else {
+    languages = LANGUAGE_TARGETS[countryLower] || []
+  }
+
   for (const lang of languages) {
     await customer.mutateResources([{
       entity: 'campaign_criterion' as const,
@@ -505,8 +538,9 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         WHERE campaign.name = '${campaignName.replace(/'/g, "\\'")}' LIMIT 1
       `)
       const newCampId = String((newCampRows[0] as any)?.campaign?.id || '')
+      const newCampLangOverrides = Array.isArray(details.languages) ? details.languages as string[] : undefined
       if (newCampId) {
-        await applyTargeting(customer, String(details.customer_id), newCampId, country)
+        await applyTargeting(customer, String(details.customer_id), newCampId, country, newCampLangOverrides)
       }
       return { created: campaignName, targeting: country }
     }
@@ -528,8 +562,9 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
     case 'campaign_targeting': {
       if (!details.google_campaign_id) throw new Error('Campagne niet gevonden voor targeting aanpassing')
       const targetCountry = String(details.country || 'nl').toLowerCase()
-      await applyTargeting(customer, String(details.customer_id), String(details.google_campaign_id), targetCountry)
-      return { campaign_id: details.google_campaign_id, country: targetCountry }
+      const langOverrides = Array.isArray(details.languages) ? details.languages as string[] : undefined
+      await applyTargeting(customer, String(details.customer_id), String(details.google_campaign_id), targetCountry, langOverrides)
+      return { campaign_id: details.google_campaign_id, country: targetCountry, languages: langOverrides }
     }
 
     case 'ad_text_change': {
