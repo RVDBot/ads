@@ -3,7 +3,7 @@ import { getDb } from '@/lib/db'
 import { requireAuth } from '@/lib/auth-guard'
 import { getSetting } from '@/lib/settings'
 import { log } from '@/lib/logger'
-import { getGoogleAdsClient, syncAds, syncAdGroups } from '@/lib/google-ads'
+import { getGoogleAdsClient, syncAds, syncAdGroups, syncCampaigns } from '@/lib/google-ads'
 
 interface ApplyActionBody {
   message_id: number
@@ -16,6 +16,12 @@ interface ProposedAction {
   title: string
   status?: string
   details: Record<string, unknown>
+}
+
+function parseMoney(value: unknown): number {
+  if (typeof value === 'number') return value
+  const s = String(value ?? '').replace(/[^0-9.,]/g, '').replace(',', '.')
+  return parseFloat(s) || 0
 }
 
 function findCampaignByName(db: ReturnType<typeof getDb>, name: string) {
@@ -91,7 +97,7 @@ async function verifyAction(actionType: string, details: Record<string, unknown>
         const actualBudget = row?.campaign_budget?.amount_micros
           ? Number(row.campaign_budget.amount_micros) / 1_000_000
           : null
-        const expected = Number(details.new_budget || 0)
+        const expected = parseMoney(details.new_budget)
         return { verified: actualBudget !== null && Math.abs(actualBudget - expected) < 0.01, actual: actualBudget, expected }
       }
 
@@ -233,6 +239,28 @@ const LANGUAGE_TARGETS: Record<string, string[]> = {
   no: ['languageConstants/1013'],             // Noors
 }
 
+function applyBidStrategy(resource: Record<string, unknown>, strategy: string, details: Record<string, unknown>) {
+  switch (strategy.toLowerCase()) {
+    case 'maximize_clicks':
+      resource.maximize_clicks = {}
+      break
+    case 'maximize_conversions':
+      resource.maximize_conversions = {}
+      break
+    case 'maximize_conversion_value':
+      resource.maximize_conversion_value = details.target_roas ? { target_roas: Number(details.target_roas) } : {}
+      break
+    case 'target_cpa':
+      resource.target_cpa = { target_cpa_micros: Math.round(Number(details.target_cpa || 0) * 1_000_000) }
+      break
+    case 'target_roas':
+      resource.target_roas = { target_roas: Number(details.target_roas || 0) }
+      break
+    default: // manual_cpc
+      resource.manual_cpc = { enhanced_cpc_enabled: false }
+  }
+}
+
 async function applyTargeting(
   customer: ReturnType<typeof getGoogleAdsClient>,
   customerId: string,
@@ -297,6 +325,8 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
   switch (actionType) {
     case 'budget_change': {
       if (!details.google_campaign_id) throw new Error('Campagne niet gevonden voor budget wijziging')
+      const newBudget = parseMoney(details.new_budget)
+      if (newBudget < 1) throw new Error(`Budget te laag: €${newBudget.toFixed(2)}. Minimaal €1,00 vereist.`)
       const [campaign] = await customer.query(`
         SELECT campaign.id, campaign_budget.resource_name
         FROM campaign
@@ -311,7 +341,7 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         operation: 'update',
         resource: {
           resource_name: campaign.campaign_budget.resource_name as string,
-          amount_micros: Math.round(Number(details.new_budget || 0) * 1_000_000),
+          amount_micros: Math.round(newBudget * 1_000_000),
         },
       }])
     }
@@ -400,7 +430,7 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
           operation: 'create' as const,
           resource: {
             name: budgetName,
-            amount_micros: Math.round(Number(details.daily_budget || 10) * 1_000_000),
+            amount_micros: Math.round(Math.max(parseMoney(details.daily_budget) || 10, 1) * 1_000_000),
             delivery_method: 'STANDARD',
           },
         }])
@@ -455,8 +485,11 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         } else {
           campaignResource.manual_cpc = { enhanced_cpc_enabled: false }
         }
-      } else {
-        campaignResource.manual_cpc = { enhanced_cpc_enabled: false }
+      }
+
+      // Bid strategy for Search campaigns (or override for Shopping)
+      if (!isShopping) {
+        applyBidStrategy(campaignResource, (details.bid_strategy as string) || 'maximize_clicks', details)
       }
 
       await customer.mutateResources([{
@@ -476,6 +509,20 @@ async function applyAction(actionType: string, details: Record<string, unknown>)
         await applyTargeting(customer, String(details.customer_id), newCampId, country)
       }
       return { created: campaignName, targeting: country }
+    }
+
+    case 'campaign_bid_strategy': {
+      if (!details.google_campaign_id) throw new Error('Campagne niet gevonden voor bid strategy aanpassing')
+      const bsResource: Record<string, unknown> = {
+        resource_name: `customers/${details.customer_id}/campaigns/${details.google_campaign_id}`,
+      }
+      applyBidStrategy(bsResource, String(details.strategy || 'maximize_clicks'), details)
+      log('info', 'google-ads', `Bid strategy gewijzigd naar ${details.strategy}`, { campaign_id: details.google_campaign_id })
+      return customer.mutateResources([{
+        entity: 'campaign' as const,
+        operation: 'update' as const,
+        resource: bsResource,
+      }])
     }
 
     case 'campaign_targeting': {
@@ -817,6 +864,9 @@ export async function POST(req: NextRequest) {
         break
       case 'campaign_targeting':
         newValue = details.country as string | null ?? null
+        break
+      case 'campaign_bid_strategy':
+        newValue = details.strategy as string | null ?? null
         break
     }
 
