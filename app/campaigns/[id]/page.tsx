@@ -62,6 +62,7 @@ interface Ad {
   id: number
   headlines: string
   descriptions: string
+  final_urls: string
   status: string
   adgroup_name: string
 }
@@ -599,6 +600,8 @@ export default function CampaignDetailPage() {
               {(showAllAds ? ads : ads.slice(0, 12)).map(ad => {
                 const headlines = JSON.parse(ad.headlines || '[]') as string[]
                 const descriptions = JSON.parse(ad.descriptions || '[]') as string[]
+                const urls = JSON.parse(ad.final_urls || '[]') as string[]
+                const url = urls[0] || null
                 return (
                   <div key={ad.id} className="bg-surface-0 border border-border-subtle rounded-xl p-3 flex flex-col gap-1.5">
                     <div className="text-[10px] font-medium text-text-tertiary truncate">{ad.adgroup_name}</div>
@@ -612,9 +615,18 @@ export default function CampaignDetailPage() {
                         <div key={i} className="text-[11px] text-text-secondary leading-snug line-clamp-2">{d}</div>
                       ))}
                     </div>
-                    <div className="flex items-center gap-1 mt-auto pt-1">
-                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: statusDotColor(ad.status) }} />
-                      <span className="text-[10px] text-text-tertiary">{(ad.status === 'ENABLED' || ad.status === '2') ? 'Live' : (ad.status === 'PAUSED' || ad.status === '3') ? 'Gepauzeerd' : ad.status}</span>
+                    <div className="flex items-center justify-between gap-1 mt-auto pt-1">
+                      <div className="flex items-center gap-1 min-w-0">
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: statusDotColor(ad.status) }} />
+                        <span className="text-[10px] text-text-tertiary shrink-0">{(ad.status === 'ENABLED' || ad.status === '2') ? 'Live' : (ad.status === 'PAUSED' || ad.status === '3') ? 'Gepauzeerd' : ad.status}</span>
+                      </div>
+                      {url && (
+                        <a href={url} target="_blank" rel="noopener noreferrer"
+                          className="text-[10px] text-text-tertiary hover:text-accent truncate max-w-[60%] text-right"
+                          title={url}>
+                          {new URL(url).hostname.replace(/^www\./, '')}
+                        </a>
+                      )}
                     </div>
                   </div>
                 )

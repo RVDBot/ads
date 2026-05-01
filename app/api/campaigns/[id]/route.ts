@@ -69,7 +69,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     : `AND (a.status = '${adStatus}' OR a.status = '${adStatusNumeric[adStatus] ?? adStatus}')`
 
   const ads = db.prepare(`
-    SELECT a.id, a.headlines, a.descriptions, a.status, ag.name as adgroup_name
+    SELECT a.id, a.headlines, a.descriptions, a.final_urls, a.status, ag.name as adgroup_name
     FROM ads a
     JOIN ad_groups ag ON ag.id = a.adgroup_id
     WHERE ag.campaign_id = ? ${adStatusFilter}
