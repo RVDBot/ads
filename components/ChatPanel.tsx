@@ -55,6 +55,7 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
   const [toolStatus, setToolStatus] = useState<string | null>(null)
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([])
   const [dragging, setDragging] = useState(false)
+  const [deployBanner, setDeployBanner] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   function addImages(files: File[]) {
@@ -104,6 +105,29 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
     }
     loadThread()
   }, [contextType, contextId])
+
+  // Check for new deployment
+  useEffect(() => {
+    async function checkVersion() {
+      try {
+        const res = await apiFetch('/api/version')
+        if (!res.ok) return
+        const { version } = await res.json()
+        const lastSeen = localStorage.getItem('ads_app_version')
+        if (lastSeen && lastSeen !== version) {
+          setDeployBanner(version)
+        } else {
+          localStorage.setItem('ads_app_version', version)
+        }
+      } catch { /* ignore */ }
+    }
+    checkVersion()
+  }, [])
+
+  function dismissBanner(version: string) {
+    localStorage.setItem('ads_app_version', version)
+    setDeployBanner(null)
+  }
 
   async function handleClearChat() {
     if (!threadId || streaming) return
@@ -306,9 +330,12 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
             toolStatus={toolStatus}
             pendingImages={pendingImages}
             dragging={dragging}
+            deployBanner={deployBanner}
             textareaRef={textareaRef}
             onClose={onClose}
             onClear={handleClearChat}
+            onDismissBanner={() => deployBanner && dismissBanner(deployBanner)}
+            onClearAndDismissBanner={async () => { await handleClearChat(); deployBanner && dismissBanner(deployBanner) }}
             onInput={handleInput}
             onKeyDown={handleKeyDown}
             onSend={handleSend}
@@ -331,9 +358,12 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
           toolStatus={toolStatus}
           pendingImages={pendingImages}
           dragging={dragging}
+          deployBanner={deployBanner}
           textareaRef={textareaRef}
           onClose={onClose}
           onClear={handleClearChat}
+          onDismissBanner={() => deployBanner && dismissBanner(deployBanner)}
+          onClearAndDismissBanner={async () => { await handleClearChat(); deployBanner && dismissBanner(deployBanner) }}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
           onSend={handleSend}
@@ -348,7 +378,7 @@ export default function ChatPanel({ contextType, contextId, title, onClose }: Ch
   )
 }
 
-function PanelContent({ title, messages, input, streaming, toolStatus, pendingImages, dragging, textareaRef, onClose, onClear, onInput, onKeyDown, onSend, onPaste, onDragOver, onDragLeave, onDrop, onRemoveImage }: {
+function PanelContent({ title, messages, input, streaming, toolStatus, pendingImages, dragging, deployBanner, textareaRef, onClose, onClear, onDismissBanner, onClearAndDismissBanner, onInput, onKeyDown, onSend, onPaste, onDragOver, onDragLeave, onDrop, onRemoveImage }: {
   title?: string
   messages: Message[]
   input: string
@@ -356,9 +386,12 @@ function PanelContent({ title, messages, input, streaming, toolStatus, pendingIm
   toolStatus: string | null
   pendingImages: PendingImage[]
   dragging: boolean
+  deployBanner: string | null
   textareaRef: React.RefObject<HTMLTextAreaElement | null>
   onClose: () => void
   onClear: () => void
+  onDismissBanner: () => void
+  onClearAndDismissBanner: () => void
   onInput: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
   onSend: () => void
@@ -416,6 +449,28 @@ function PanelContent({ title, messages, input, streaming, toolStatus, pendingIm
           </svg>
         </button>
       </div>
+
+      {/* Deploy banner */}
+      {deployBanner && (
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-accent-subtle border-b border-accent/20 shrink-0">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent shrink-0">
+            <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+          </svg>
+          <span className="text-[11px] text-accent flex-1">Nieuwe versie gedeployed (v{deployBanner})</span>
+          <button
+            onClick={onClearAndDismissBanner}
+            className="text-[11px] font-semibold text-white bg-accent hover:bg-accent-hover px-2 py-0.5 rounded-md shrink-0"
+          >
+            Chat wissen
+          </button>
+          <button onClick={onDismissBanner} className="text-text-tertiary hover:text-text-primary shrink-0 ml-0.5">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Messages */}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
