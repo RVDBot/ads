@@ -105,6 +105,14 @@ const PERIODS = [
 
 function formatBidStrategy(strategy: string | null, targetRoas: number | null): string {
   if (!strategy) return '—'
+  // Numeric enum → name (BiddingStrategyType)
+  const numericMap: Record<string, string> = {
+    '2': 'COMMISSION', '3': 'ENHANCED_CPC', '6': 'MANUAL_CPC',
+    '9': 'MAXIMIZE_CONVERSIONS', '10': 'MAXIMIZE_CONVERSION_VALUE',
+    '13': 'TARGET_CPA', '15': 'TARGET_IMPRESSION_SHARE',
+    '17': 'TARGET_ROAS', '18': 'MAXIMIZE_CLICKS',
+  }
+  const normalized = numericMap[strategy] || strategy
   const map: Record<string, string> = {
     MAXIMIZE_CLICKS: 'Max. klikken',
     MAXIMIZE_CONVERSIONS: 'Max. conversies',
@@ -114,9 +122,10 @@ function formatBidStrategy(strategy: string | null, targetRoas: number | null): 
     MANUAL_CPC: 'Handmatige CPC',
     ENHANCED_CPC: 'Verbeterde CPC',
     TARGET_IMPRESSION_SHARE: 'Vertoningsaandeel',
+    COMMISSION: 'Commissie',
   }
-  const label = map[strategy] || strategy
-  if (strategy === 'TARGET_ROAS' && targetRoas) return `${label} (${targetRoas.toFixed(1)}x)`
+  const label = map[normalized] || normalized
+  if (normalized === 'TARGET_ROAS' && targetRoas) return `${label} (${targetRoas.toFixed(1)}x)`
   return label
 }
 

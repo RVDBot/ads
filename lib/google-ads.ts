@@ -37,6 +37,17 @@ const CAMPAIGN_STATUS_MAP: Record<string, string> = {
   ENABLED: 'ENABLED', PAUSED: 'PAUSED', REMOVED: 'REMOVED', UNKNOWN: 'UNKNOWN',
 }
 
+const BIDDING_STRATEGY_MAP: Record<string, string> = {
+  '2': 'COMMISSION', '3': 'ENHANCED_CPC', '6': 'MANUAL_CPC',
+  '9': 'MAXIMIZE_CONVERSIONS', '10': 'MAXIMIZE_CONVERSION_VALUE',
+  '13': 'TARGET_CPA', '15': 'TARGET_IMPRESSION_SHARE',
+  '17': 'TARGET_ROAS', '18': 'MAXIMIZE_CLICKS',
+  COMMISSION: 'COMMISSION', ENHANCED_CPC: 'ENHANCED_CPC', MANUAL_CPC: 'MANUAL_CPC',
+  MAXIMIZE_CONVERSIONS: 'MAXIMIZE_CONVERSIONS', MAXIMIZE_CONVERSION_VALUE: 'MAXIMIZE_CONVERSION_VALUE',
+  TARGET_CPA: 'TARGET_CPA', TARGET_IMPRESSION_SHARE: 'TARGET_IMPRESSION_SHARE',
+  TARGET_ROAS: 'TARGET_ROAS', MAXIMIZE_CLICKS: 'MAXIMIZE_CLICKS', TARGET_SPEND: 'MAXIMIZE_CLICKS',
+}
+
 // Try to derive country from campaign name (e.g., "NL - Search" or "Shopping FR")
 function deriveCountry(name: string): string | null {
   const countryCodes = ['nl', 'de', 'fr', 'es', 'it']
@@ -105,7 +116,7 @@ export async function syncCampaigns() {
         mappedStatus,
         country,
         budget,
-        String(c.bidding_strategy_type || ''),
+        BIDDING_STRATEGY_MAP[String(c.bidding_strategy_type || '')] || String(c.bidding_strategy_type || ''),
         c.target_roas?.target_roas || null,
         startDate
       )
