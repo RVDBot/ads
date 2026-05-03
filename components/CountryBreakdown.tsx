@@ -1,6 +1,6 @@
 'use client'
 
-import { countryFlag, countryName, formatCurrency } from '@/lib/utils'
+import { countryFlag, countryName, formatCurrency, formatRoas } from '@/lib/utils'
 
 interface CountryBreakdownProps {
   data: Array<{ country: string; cost: number; value: number }>
@@ -19,7 +19,10 @@ export default function CountryBreakdown({ data }: CountryBreakdownProps) {
           <div key={d.country}>
             <div className="flex justify-between text-[12px] mb-1">
               <span className="text-text-secondary font-medium">{countryFlag(d.country)} {countryName(d.country)}</span>
-              <span className="text-text-primary font-semibold tabular-nums">{formatCurrency(d.cost)}</span>
+              <span className="text-text-primary font-semibold tabular-nums">
+                {formatCurrency(d.cost)}
+                {d.cost > 0 && <span className="text-text-tertiary font-normal ml-1">({formatRoas(d.value / d.cost)})</span>}
+              </span>
             </div>
             <div className="bg-surface-2 rounded h-1.5">
               <div className="bg-accent rounded h-full transition-all" style={{ width: `${(d.cost / maxCost) * 100}%` }} />
